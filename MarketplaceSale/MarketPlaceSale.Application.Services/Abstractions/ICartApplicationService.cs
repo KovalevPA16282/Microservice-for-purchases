@@ -1,42 +1,27 @@
-﻿using MarketPlaceSale.Application.Models.Cart;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
+using MarketplaceSale.Application.Models.Cart;
 
-namespace MarketPlaceSale.Application.Services.Abstractions
+namespace MarketplaceSale.Application.Services.Abstractions;
+
+public enum CartCommandResult
 {
-    public interface ICartApplicationService
-    {
-        Task<CartModel?> GetCartByIdAsync(Guid id, CancellationToken cancellationToken);
+    Ok,
+    NotFound,
+    Invalid
+}
 
-        /*Task<CartModel?> GetCartByUsernameAsync(string username, CancellationToken cancellationToken);*/
+public interface ICartApplicationService
+{
+    Task<CartModel?> GetCartByClientIdAsync(Guid clientId, CancellationToken cancellationToken);
 
-        Task<IEnumerable<CartModel>> GetCartAsync(CancellationToken cancellationToken);
+    Task<CartCommandResult> AddToCartAsync(Guid clientId, Guid productId, int quantity, CancellationToken cancellationToken);
+    Task<CartCommandResult> ChangeQuantityAsync(Guid clientId, Guid productId, int newQuantity, CancellationToken cancellationToken);
 
-        Task<CartModel?> CreateCartAsync(CreateCartModel CartInformation, CancellationToken cancellationToken);
+    Task<CartCommandResult> RemoveFromCartAsync(Guid clientId, Guid productId, CancellationToken cancellationToken);
+    Task<CartCommandResult> ClearCartAsync(Guid clientId, CancellationToken cancellationToken);
 
-        Task<bool> UpdateCartAsync(CartModel Cart, CancellationToken cancellationToken);
-
-        Task<bool> DeleteCartAsync(Guid id, CancellationToken cancellationToken);
-
-        /*
-        Task<CartModel?> GetCartByCartIdAsync(Guid CartId, CancellationToken cancellationToken);
-
-        Task<bool> AddProductToCartAsync(Guid CartId, Guid productId, int quantity, CancellationToken cancellationToken);
-
-        Task<bool> RemoveProductFromCartAsync(Guid CartId, Guid productId, CancellationToken cancellationToken);
-
-        Task<bool> SelectProductAsync(Guid CartId, Guid productId, CancellationToken cancellationToken);
-
-        Task<bool> UnselectProductAsync(Guid CartId, Guid productId, CancellationToken cancellationToken);
-
-        Task<bool> ClearSelectedAsync(Guid CartId, CancellationToken cancellationToken);
-
-        Task<bool> ClearCartAsync(Guid CartId, CancellationToken cancellationToken);
-
-        Task<decimal> GetTotalPriceAsync(Guid CartId, CancellationToken cancellationToken);
-        */
-    }
+    Task<CartCommandResult> SelectProductAsync(Guid clientId, Guid productId, CancellationToken cancellationToken);
+    Task<CartCommandResult> UnselectProductAsync(Guid clientId, Guid productId, CancellationToken cancellationToken);
 }

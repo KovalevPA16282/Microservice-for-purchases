@@ -11,9 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\MarketPlaceSale.Application.Models\MarketPlaceSale.Application.Models.csproj" />
+    <ProjectReference Include="..\MarketplaceSale.Application.Models\MarketplaceSale.Application.Models.csproj" />
     <ProjectReference Include="..\MarketplaceSale.Domain.Repositories.Abstractions\MarketplaceSale.Domain.Repositories.Abstractions.csproj" />
     <ProjectReference Include="..\MarketplaceSale.Domain\MarketplaceSale.Domain.csproj" />
+    <ProjectReference Include="..\MarketplaceSale.Infrastructure.EntityFramework\MarketplaceSale.Infrastructure.EntityFramework.csproj" />
   </ItemGroup>
 
 </Project>

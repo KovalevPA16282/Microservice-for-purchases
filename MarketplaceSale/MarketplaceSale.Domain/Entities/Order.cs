@@ -1,14 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using MarketplaceSale.Domain.ValueObjects;
-using MarketplaceSale.Domain.Enums;
 using MarketplaceSale.Domain.Entities.Base;
+using MarketplaceSale.Domain.Enums;
 using MarketplaceSale.Domain.Exceptions;
-using System.Collections.ObjectModel;
-
+using MarketplaceSale.Domain.ValueObjects;
 
 namespace MarketplaceSale.Domain.Entities
 {
@@ -16,124 +12,134 @@ namespace MarketplaceSale.Domain.Entities
     {
         #region Fields
 
-        private readonly ICollection<OrderLine> _orderLines = new List<OrderLine>();
-        private readonly Dictionary<Product, Quantity> _returnedProducts = new Dictionary<Product, Quantity>();
-        private readonly Dictionary<Seller, ReturnStatus> _returnStatuses = new Dictionary<Seller, ReturnStatus>();
+        private readonly List<OrderLine> _orderLines = new();
 
-
+        // Табличное хранение возвратов (для EF и домена)
+        private readonly List<OrderReturnProduct> _returnedProductsRows = new();
+        private readonly List<OrderReturnStatus> _returnStatusesRows = new();
 
         #endregion
 
         #region Properties
 
         private Order() { }
-        public Client Client { get; private set; }
-        //public Guid ClientId { get; private set; }
-        public Client? ClientReturning { get; private set; } // потому что этот молодец не умеет делать связь 😥
-        // EF Core — одно навигационное свойство = одна связь
 
-        public Client? ClientHistory { get; private set; }
-        public Guid? ClientReturningId { get; private set; }
-        public IReadOnlyCollection<OrderLine> OrderLines => new ReadOnlyCollection<OrderLine>(_orderLines.ToList());
+        public Client Client { get; private set; } = null!;
 
+        //public Client? ClientReturning { get; private set; }
+        ////public Client? ClientHistory { get; private set; }
+        //public Guid? ClientReturningId { get; private set; }
 
-        public IReadOnlyDictionary<Product, Quantity> ReturnedProducts => _returnedProducts;
-        public IReadOnlyDictionary<Seller, ReturnStatus> ReturnStatuses => _returnStatuses;
+        public IReadOnlyCollection<OrderLine> OrderLines => _orderLines.AsReadOnly();
 
-        public Money TotalAmount { get; private set; }
+        // Проекции поверх rows, чтобы остальной код мог работать со словарями
+        public IReadOnlyDictionary<(Guid SellerId, Guid ProductId), Quantity> ReturnedProducts =>
+            _returnedProductsRows.ToDictionary(
+                x => (x.SellerId, x.ProductId),
+                x => x.Quantity);
 
+        public IReadOnlyDictionary<Guid, ReturnStatus> ReturnStatuses =>
+            _returnStatusesRows.ToDictionary(
+                x => x.SellerId,
+                x => x.Status);
+
+        public Money TotalAmount { get; private set; } = new Money(0);
         public OrderStatus Status { get; private set; }
+        public OrderDate OrderDate { get; private set; } = null!;
+        public DeliveryDate? DeliveryDate { get; private set; }
 
-
-        public OrderDate OrderDate { get; private set; }
-
-        public DeliveryDate DeliveryDate { get; private set; }
         #endregion
 
         #region Constructors
 
         public Order(Client client, IEnumerable<Product> products)
-            : this(client, products, new Money(products.Sum(p => p.Price.Value))) { }
-
-
-
-
-        protected Order(Client client, IEnumerable<Product> products, Money totalAmount)
             : base(Guid.NewGuid())
         {
             if (client is null)
                 throw new ArgumentNullValueException(nameof(client));
+
             if (products is null || !products.Any())
                 throw new EmptyOrderProductListException();
-            if (totalAmount is null)
-                throw new ArgumentNullValueException(nameof(totalAmount));
 
             Client = client;
-            TotalAmount = totalAmount;
             Status = OrderStatus.Pending;
             OrderDate = new OrderDate(DateTime.UtcNow);
 
-            foreach (var group in products.GroupBy(p => p))
+            foreach (var group in products.GroupBy(p => p.Id))
             {
-                _orderLines.Add(new OrderLine(group.Key, new Quantity(group.Count())));
+                var product = group.First();
+                var line = new OrderLine(product, new Quantity(group.Count()));
+                line.AttachToOrder(this);
+                _orderLines.Add(line);
             }
+
+            RecalculateTotal();
         }
 
         #endregion
 
         #region Behavior
 
-        //также добавить методы для изменения количества в ордерлайне, в карте и картлайне ессть допы
+        public Money CalculateTotal()
+            => new Money(_orderLines.Sum(l => l.Product.Price.Value * l.Quantity.Value));
 
-        public Money CalculateTotal() // стоимость всего заказа
-        {
-            return new Money(_orderLines.Sum(l => l.Product.Price.Value * l.Quantity.Value));
-        }
+        private void RecalculateTotal()
+            => TotalAmount = CalculateTotal();
 
         public void AddProduct(Product product, Quantity quantity)
         {
             if (product is null)
                 throw new ArgumentNullValueException(nameof(product));
+
             if (quantity is null || quantity.Value <= 0)
                 throw new QuantityMustBePositiveException(product, quantity);
 
-            var line = _orderLines.FirstOrDefault(l => l.Product == product);
+            var line = _orderLines.FirstOrDefault(l => l.Product.Id == product.Id);
+
             if (line != null)
             {
                 line.IncreaseQuantity(quantity);
             }
             else
             {
-                _orderLines.Add(new OrderLine(product, quantity));
+                var newLine = new OrderLine(product, quantity);
+                newLine.AttachToOrder(this);
+                _orderLines.Add(newLine);
             }
+
+            RecalculateTotal();
         }
 
         public void RemoveProduct(Product product)
         {
-            var line = _orderLines.FirstOrDefault(l => l.Product == product);
+            if (product is null)
+                throw new ArgumentNullValueException(nameof(product));
+
+            var line = _orderLines.FirstOrDefault(l => l.Product.Id == product.Id);
             if (line == null)
                 throw new ProductNotInCartException(product);
 
             _orderLines.Remove(line);
+            RecalculateTotal();
         }
 
-        public void MarkAsPending() // заказ оплачен
+        public void MarkAsPending()
         {
-            if (Status == OrderStatus.Paid) // ошибка : заказ уже оплатили
+            if (Status == OrderStatus.Paid)
                 throw new InvalidOrderStatusChangeException(Status, OrderStatus.Paid);
 
             Status = OrderStatus.Pending;
         }
 
-        public void MarkAsPaid() // заказ оплачен
+        public void MarkAsPaid()
         {
-            if (Status != OrderStatus.Pending) // заказ не оформлен
+            if (Status != OrderStatus.Pending)
                 throw new InvalidOrderStatusChangeException(Status, OrderStatus.Paid);
 
             Status = OrderStatus.Paid;
         }
 
-        public void MarkAsShipped() // заказ в доставке
+        public void MarkAsShipped()
         {
             if (Status != OrderStatus.Paid)
                 throw new InvalidOrderStatusChangeException(Status, OrderStatus.Shipped);
@@ -141,7 +147,7 @@ namespace MarketplaceSale.Domain.Entities
             Status = OrderStatus.Shipped;
         }
 
-        public void MarkAsDelivered() // заказ доставлен
+        public void MarkAsDelivered()
         {
             if (Status != OrderStatus.Shipped)
                 throw new InvalidOrderStatusChangeException(Status, OrderStatus.Delivered);
@@ -150,7 +156,7 @@ namespace MarketplaceSale.Domain.Entities
             DeliveryDate = new DeliveryDate(DateTime.UtcNow);
         }
 
-        public void MarkAsCompleted() // заказ выполнен
+        public void MarkAsCompleted()
         {
             if (Status != OrderStatus.Delivered)
                 throw new InvalidOrderStatusChangeException(Status, OrderStatus.Completed);
@@ -158,8 +164,7 @@ namespace MarketplaceSale.Domain.Entities
             Status = OrderStatus.Completed;
         }
 
-
-        public void MarkAsCancelled() // заказ отменён
+        public void MarkAsCancelled()
         {
             if (Status != OrderStatus.Paid)
                 throw new InvalidOrderCancellationException(Status);
@@ -167,6 +172,9 @@ namespace MarketplaceSale.Domain.Entities
             Status = OrderStatus.Cancelled;
         }
 
+        /// <summary>
+        /// Клиент запрашивает возврат части товара у конкретного продавца.
+        /// </summary>
         public void RequestProductReturn(Seller seller, Product product, Quantity quantity)
         {
             if (seller is null)
@@ -181,137 +189,144 @@ namespace MarketplaceSale.Domain.Entities
             if (Status != OrderStatus.Completed)
                 throw new InvalidReturnRequestException(Status);
 
-            var orderLine = _orderLines.FirstOrDefault(line =>
-                line.Product == product && line.Product.Seller == seller);
+            var sellerId = seller.Id;
 
-            if (orderLine == null)
+            // Ищем строку заказа по ProductId + SellerId (через OrderLine.SellerId)
+            var orderLine = _orderLines.FirstOrDefault(line =>
+                line.Product.Id == product.Id &&
+                line.SellerId == sellerId);
+
+            if (orderLine is null)
                 throw new ProductNotInOrderException(product);
 
-            if (quantity.Value > orderLine.Quantity.Value)
-                throw new InvalidRefundQuantityException(product, quantity, orderLine.Quantity.Value);
+            var currentStatus = _returnStatusesRows
+                .FirstOrDefault(x => x.SellerId == sellerId)?.Status
+                ?? ReturnStatus.None;
 
-            // Инициализируем структуру возвратов, если надо
-            if (!_returnStatuses.ContainsKey(seller))
-                _returnStatuses[seller] = ReturnStatus.None;
-
-            if (_returnStatuses[seller] != ReturnStatus.None)
-                throw new ReturnAlreadyInProgressException(_returnStatuses[seller]);
-
-            _returnStatuses[seller] = ReturnStatus.Requested;
-
-            // Добавим запись о том, что конкретный товар в этом количестве подлежит возврату
-            _returnedProducts.Add(product, quantity);
-        }
+            if (currentStatus != ReturnStatus.None)
+                throw new ReturnAlreadyInProgressException(currentStatus);
 
 
+            var existingRow = _returnedProductsRows.FirstOrDefault(x =>
+                x.SellerId == sellerId &&
+                x.ProductId == product.Id);
 
-        public void RejectReturn(Seller seller) // возврат отклонён
-        {
-            if (seller is null)
-                throw new ArgumentNullValueException(nameof(seller));
+            var alreadyRequested = existingRow?.Quantity.Value ?? 0;
+            var newTotalRequested = alreadyRequested + quantity.Value;
 
-            if (!_returnStatuses.TryGetValue(seller, out var status) || status != ReturnStatus.Requested)
-                throw new ReturnNotRequestedException();
+            if (newTotalRequested > orderLine.Quantity.Value)
+                throw new InvalidRefundQuantityException(
+                    product,
+                    new Quantity(newTotalRequested),
+                    orderLine.Quantity.Value);
 
-            _returnStatuses[seller] = ReturnStatus.Rejected;
-        }
-
-
-        public void ApproveReturn(Seller seller) // возврат одобрен
-        {
-            if (seller is null)
-                throw new ArgumentNullValueException(nameof(seller));
-
-            if (!_returnStatuses.TryGetValue(seller, out var status) || status != ReturnStatus.Requested)
-                throw new ReturnNotRequestedException();
-
-            foreach (var line in _orderLines.Where(l => l.Product.Seller == seller))
+            if (existingRow is null)
             {
-                var quantity = line.Quantity;
-                line.Product.OrderRefundStock(seller, quantity);
+                _returnedProductsRows.Add(
+                    new OrderReturnProduct(
+                        Id,
+                        sellerId,
+                        product.Id,
+                        new Quantity(newTotalRequested)));
+            }
+            else
+            {
+                existingRow.ChangeQuantity(new Quantity(newTotalRequested));
             }
 
-            _returnStatuses[seller] = ReturnStatus.Approved;
-            //Status = OrderStatus.CancelledDueToRefund;
+            var statusRow = _returnStatusesRows.FirstOrDefault(x => x.SellerId == sellerId);
+            if (statusRow is null)
+            {
+                _returnStatusesRows.Add(
+                    new OrderReturnStatus(
+                        Id,
+                        sellerId,
+                        ReturnStatus.Requested));
+            }
+            else
+            {
+                statusRow.ChangeStatus(ReturnStatus.Requested);
+            }
         }
 
-        /*
-        public void PartialRefund(Seller seller, Product product, Quantity quantity) // частичный возврат
+        public void RejectReturn(Seller seller)
         {
-            if (!_returnStatuses.TryGetValue(seller, out var status) || status != ReturnStatus.Approved)
-                throw new ReturnNotApprovedException();
+            if (seller is null)
+                throw new ArgumentNullValueException(nameof(seller));
 
-            var line = _orderLines.FirstOrDefault(l => l.Product == product)
-                ?? throw new ProductNotInOrderException(product);
+            var sellerId = seller.Id;
 
-            if (line.Product.Seller != seller)
-                throw new ProductDoesNotBelongToSellerException(product, seller);
+            var statusRow = _returnStatusesRows.FirstOrDefault(x => x.SellerId == sellerId);
+            if (statusRow is null || statusRow.Status != ReturnStatus.Requested)
+                throw new ReturnNotRequestedException();
 
-            var alreadyReturned = _returnedProducts.ContainsKey(product)
-                ? _returnedProducts[product].Value : 0;
+            statusRow.ChangeStatus(ReturnStatus.Rejected);
 
-            var remainingQuantity = line.Quantity.Value - alreadyReturned;
-
-            if (quantity.Value > remainingQuantity)
-                throw new InvalidRefundQuantityException(product, quantity, remainingQuantity);
-
-            product.OrderRefundStock(seller, quantity);
-
-            if (_returnedProducts.ContainsKey(product))
-                _returnedProducts[product] = new Quantity(_returnedProducts[product].Value + quantity.Value);
-            else
-                _returnedProducts.Add(product, quantity);
-
-            // Проверка: все ли товары от этого продавца возвращены
-            var allReturned = _orderLines
-                .Where(l => l.Product.Seller == seller)
-                .All(l =>
-                    _returnedProducts.TryGetValue(l.Product, out var returned) &&
-                    returned.Value >= l.Quantity.Value
-                );
-
-            if (allReturned)
-                _returnStatuses[seller] = ReturnStatus.Refunded;
-            else
-                _returnStatuses[seller] = ReturnStatus.PartialRefunded;
+            _returnedProductsRows.RemoveAll(x => x.SellerId == sellerId);
         }
-        */
 
+        /// <summary>
+        /// Продавец одобряет возврат. Здесь только статус, без склада/денег.
+        /// </summary>
+        public void ApproveReturn(Seller seller)
+        {
+            if (seller is null)
+                throw new ArgumentNullValueException(nameof(seller));
+
+            var sellerId = seller.Id;
+
+            var statusRow = _returnStatusesRows.FirstOrDefault(x => x.SellerId == sellerId);
+            if (statusRow is null || statusRow.Status != ReturnStatus.Requested)
+                throw new ReturnNotRequestedException();
+
+            statusRow.ChangeStatus(ReturnStatus.Approved);
+        }
+
+        /// <summary>
+        /// Возврат завершён: товары реально вернулись на склад (по запрошенному количеству).
+        /// Деньги списываются у продавца в Seller.ApproveOrderReturn.
+        /// </summary>
         public void MarkAsRefunded(Seller seller)
         {
-            if (!_returnStatuses.TryGetValue(seller, out var status) || status != ReturnStatus.Approved)
+            if (seller is null)
+                throw new ArgumentNullValueException(nameof(seller));
+
+            var sellerId = seller.Id;
+
+            var statusRow = _returnStatusesRows.FirstOrDefault(x => x.SellerId == sellerId);
+            if (statusRow is null || statusRow.Status != ReturnStatus.Approved)
                 throw new ReturnNotApprovedException();
 
-            foreach (var line in _orderLines.Where(l => l.Product.Seller == seller))
+            foreach (var line in _orderLines.Where(l => l.SellerId == sellerId))
             {
-                var returned = _returnedProducts.TryGetValue(line.Product, out var q) ? q.Value : 0;
-                var remaining = line.Quantity.Value - returned;
+                var row = _returnedProductsRows.FirstOrDefault(x =>
+                    x.SellerId == sellerId &&
+                    x.ProductId == line.Product.Id);
 
-                if (remaining > 0)
-                {
-                    line.Product.OrderRefundStock(seller, new Quantity(remaining));
-                    _returnedProducts[line.Product] = new Quantity(returned + remaining);
-                }
+                if (row is null)
+                    continue;
+
+                var requestedQty = row.Quantity;
+
+                if (requestedQty.Value <= 0)
+                    continue;
+
+                if (requestedQty.Value > line.Quantity.Value)
+                    throw new InvalidRefundQuantityException(
+                        line.Product,
+                        requestedQty,
+                        line.Quantity.Value);
+
+                line.Product.OrderRefundStock(sellerId, requestedQty);
             }
 
-            _returnStatuses[seller] = ReturnStatus.Refunded;
+            statusRow.ChangeStatus(ReturnStatus.Refunded);
+            //_returnedProductsRows.RemoveAll(x => x.SellerId == sellerId);
         }
 
+        public DeliveryDate GetDeliveryDateOrThrow()
+            => DeliveryDate ?? throw new InvalidOperationException("Order is not delivered yet.");
 
-
-        public void MarkAsNoneRefunded(Seller seller)
-        {
-            //if (!_returnStatuses.TryGetValue(seller, out var status) || status != ReturnStatus.Approved)
-            //    throw new ReturnNotApprovedException();
-
-            _returnStatuses[seller] = ReturnStatus.None;
-        }
-
-        /*public void UpdateStatus(OrderStatus newStatus) // обновить статус
-        {
-            Status = OrderStatus.newStatus;
-        }
-        */
         #endregion
     }
 }

@@ -8,7 +8,7 @@ using MarketplaceSale.Domain.Entities;
 
 namespace MarketplaceSale.Domain.Exceptions
 {
-    internal class OrderDoesNotBelongToSellerException(Order order, Seller seller)
+    public class OrderDoesNotBelongToSellerException(Order order, Seller seller)
         : InvalidOperationException($"Order with ID '{order.Id}' does not belong to seller '{seller.Username}'.")
     {
         public Order Order => order;

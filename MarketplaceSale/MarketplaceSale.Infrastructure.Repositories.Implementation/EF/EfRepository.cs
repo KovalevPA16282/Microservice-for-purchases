@@ -1,6 +1,11 @@
-﻿using MarketplaceSale.Infrastructure.EntityFramework;
-using MarketplaceSale.Domain.Repositories.Abstractions;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using MarketplaceSale.Domain.Entities.Base;
+using MarketplaceSale.Domain.Repositories.Abstractions;
+using MarketplaceSale.Infrastructure.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 
 namespace MarketplaceSale.Infrastructure.Repositories.Implementation.EF
@@ -10,43 +15,60 @@ namespace MarketplaceSale.Infrastructure.Repositories.Implementation.EF
         where TEntity : Entity<TId>
         where TId : struct, IEquatable<TId>
     {
-        public async Task<IEnumerable<TEntity>> GetAllAsync(CancellationToken cancellationToken, bool asNoTracking = false)
-            => await (asNoTracking ? context.Set<TEntity>().AsNoTracking() : context.Set<TEntity>())
-            .ToListAsync(cancellationToken);
+        protected readonly ApplicationDbContext _context = context;
+        protected readonly DbSet<TEntity> _dbSet = context.Set<TEntity>();
 
-        public virtual async Task<TEntity?> GetByIdAsync(TId id, CancellationToken cancellationToken)
-            => await context.Set<TEntity>().FindAsync(id, cancellationToken);
-
-        public async Task<TEntity?> AddAsync(TEntity entity, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<TEntity>> GetAllAsync(
+            CancellationToken cancellationToken,
+            bool asNoTracking = false)
         {
-            ArgumentNullException.ThrowIfNull(entity, nameof(entity));
+            var query = asNoTracking
+                ? _dbSet.AsNoTracking()
+                : _dbSet;
 
-            await context.Set<TEntity>().AddAsync(entity, cancellationToken);
-            return await context.SaveChangesAsync(cancellationToken) > 0 ? entity : null;
+            return await query.ToListAsync(cancellationToken);
         }
 
-        public async Task<bool> UpdateAsync(TEntity entity, CancellationToken cancellationToken)
+        public virtual async Task<TEntity?> GetByIdAsync(
+            TId id,
+            CancellationToken cancellationToken,
+            bool asNoTracking = false)
         {
-            ArgumentNullException.ThrowIfNull(entity, nameof(entity));
+            var query = asNoTracking
+                ? _dbSet.AsNoTracking()
+                : _dbSet;
 
-            context.Set<TEntity>().Update(entity);
-            return await context.SaveChangesAsync(cancellationToken) > 0;
+            return await query.FirstOrDefaultAsync(e => e.Id.Equals(id), cancellationToken);
         }
 
-        public async Task<bool> DeleteAsync(TEntity entity, CancellationToken cancellationToken)
+        public async Task AddAsync(TEntity entity, CancellationToken cancellationToken)
         {
-            ArgumentNullException.ThrowIfNull(entity, nameof(entity));
-
-            context.Set<TEntity>().Remove(entity);
-            return await context.SaveChangesAsync(cancellationToken) > 0;
+            ArgumentNullException.ThrowIfNull(entity);
+            await _dbSet.AddAsync(entity, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
         }
 
-        public async Task<bool> DeleteAsync(TId id, CancellationToken cancellationToken)
+        public async Task UpdateAsync(TEntity entity, CancellationToken cancellationToken)
         {
-            var entity = await GetByIdAsync(id, cancellationToken);
+            ArgumentNullException.ThrowIfNull(entity);
+            _dbSet.Update(entity);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
 
-            return entity is null ? false : await DeleteAsync(entity, cancellationToken);
+        public async Task DeleteAsync(TEntity entity, CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(entity);
+            _dbSet.Remove(entity);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
 
+        public async Task DeleteAsync(TId id, CancellationToken cancellationToken)
+        {
+            var entity = await GetByIdAsync(id, cancellationToken, asNoTracking: false);
+            if (entity is null) return;
+
+            _dbSet.Remove(entity);
+            await _context.SaveChangesAsync(cancellationToken);
         }
     }
 }

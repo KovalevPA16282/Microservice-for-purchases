@@ -19,9 +19,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Common", "Common", "{887F63
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Infrastructure", "Infrastructure", "{76654039-A683-48B5-96D8-8251EBEBBF3F}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarketPlaceSale.Application.Models", "MarketPlaceSale.Application.Models\MarketPlaceSale.Application.Models.csproj", "{8F838E86-2F4B-4765-BB6C-E21C6919EF15}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarketplaceSale.Application.Models", "MarketPlaceSale.Application.Models\MarketplaceSale.Application.Models.csproj", "{8F838E86-2F4B-4765-BB6C-E21C6919EF15}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarketPlaceSale.Application.Services", "MarketPlaceSale.Application.Services\MarketPlaceSale.Application.Services.csproj", "{ECA1B703-4D31-4DCE-AB33-6A22EF9FD6F4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarketplaceSale.Application.Services", "MarketPlaceSale.Application.Services\MarketplaceSale.Application.Services.csproj", "{ECA1B703-4D31-4DCE-AB33-6A22EF9FD6F4}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ClassTest", "ClassTest\ClassTest.csproj", "{62B8F3E6-8EAA-45BD-9DD3-18448BF13225}"
 EndProject
@@ -31,7 +31,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarketplaceSale.Infrastruct
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Presentation", "Presentation", "{B35DF464-FE4D-4548-96CD-251A2A59AA51}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebApi", "MarketplaceSale.Presentation\WebApi\WebApi.csproj", "{9A5C33D1-1B83-4605-8BDD-3E242CD8D07C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarketplaceSale.WebHost", "MarketplaceSale.Presentation\WebApi\MarketplaceSale.WebHost.csproj", "{9A5C33D1-1B83-4605-8BDD-3E242CD8D07C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

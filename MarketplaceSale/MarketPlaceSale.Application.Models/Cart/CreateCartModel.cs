@@ -1,15 +1,8 @@
-﻿using MarketPlaceSale.Application.Models.Base;
-using MarketPlaceSale.Application.Models.CartLine;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System;
 
-namespace MarketPlaceSale.Application.Models.Cart
-{
-    public record class CreateCartModel(
-        Guid ClientId,
-        Guid Id        
-    ) : ICreateModel;
-}
+
+using MarketplaceSale.Application.Models.Base;
+
+namespace MarketplaceSale.Application.Models.Cart;
+
+public sealed record CreateCartModel(Guid ClientId) : ICreateModel;

@@ -1,11 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using MarketplaceSale.Domain.ValueObjects;
 using MarketplaceSale.Domain.Entities.Base;
+using MarketplaceSale.Domain.Enums;
 using MarketplaceSale.Domain.Exceptions;
+using MarketplaceSale.Domain.ValueObjects;
 
 namespace MarketplaceSale.Domain.Entities
 {
@@ -13,11 +10,11 @@ namespace MarketplaceSale.Domain.Entities
     {
         #region Properties
 
-        //public Guid SellerId { get; private set; }
         public ProductName ProductName { get; private set; }
         public Description Description { get; private set; }
         public Money Price { get; private set; }
         public Quantity StockQuantity { get; private set; }
+        public ProductListingStatus ListingStatus { get; private set; } = ProductListingStatus.Listed;
         public Seller Seller { get; private set; }
 
         #endregion
@@ -56,75 +53,141 @@ namespace MarketplaceSale.Domain.Entities
 
         public void AssignToSeller(Seller seller)
         {
-            if (Seller != null && Seller != seller)
+            if (seller is null)
+                throw new ArgumentNullValueException(nameof(seller));
+
+            if (Seller != null && Seller.Id != seller.Id)
                 throw new ProductAlreadyAssignedToAnotherSellerException(this, Seller, seller);
 
             Seller = seller;
         }
 
-        public void UnassignSeller()
+        private void EnsureSeller(Seller seller)
         {
-            Seller = null!;
+            if (seller is null)
+                throw new ArgumentNullValueException(nameof(seller));
+
+            if (Seller is null || Seller.Id != seller.Id)
+                throw new ProductDoesNotBelongToSellerException(this, seller);
+        }
+
+        // Новое: проверка по sellerId (без зависимости от инстанса Seller)
+        private void EnsureSellerId(Guid sellerId)
+        {
+            if (sellerId == Guid.Empty)
+                throw new ArgumentException("SellerId cannot be empty.", nameof(sellerId));
+
+            if (Seller is null)
+                throw new ProductWithoutSellerException(this);
+
+            if (Seller.Id != sellerId)
+                throw new ProductDoesNotBelongToSellerException(this, Seller);
         }
 
 
+        public void RemoveFromSale(Seller seller)
+        {
+            EnsureSeller(seller);
+            ListingStatus = ProductListingStatus.Unlisted;
+        }
+
+        public void ReturnToSale(Seller seller)
+        {
+            EnsureSeller(seller);
+            ListingStatus = ProductListingStatus.Listed;
+        }
+
         public void SellerIncreaseStock(Seller seller, Quantity additionalQuantity)
         {
+            if (additionalQuantity is null)
+                throw new ArgumentNullValueException(nameof(additionalQuantity));
+
             if (additionalQuantity.Value <= 0)
                 throw new QuantityMustBePositiveException(this, additionalQuantity);
-            if (seller != Seller)
-                throw new ProductDoesNotBelongToSellerException(this, seller);
+
+            EnsureSeller(seller);
             StockQuantity = new Quantity(StockQuantity.Value + additionalQuantity.Value);
         }
 
         public void SellerDecreaseStock(Seller seller, Quantity additionalQuantity)
         {
+            if (additionalQuantity is null)
+                throw new ArgumentNullValueException(nameof(additionalQuantity));
+
+            // Строго положительное количество
             if (additionalQuantity.Value <= 0)
                 throw new QuantityMustBePositiveException(this, additionalQuantity);
-            if (additionalQuantity.Value >= StockQuantity.Value)
+
+            // Разрешаем уменьшать в ноль, запрещаем только уходить в минус
+            if (additionalQuantity.Value > StockQuantity.Value)
                 throw new QuantityDecreaseExceedsAvailableException(this, additionalQuantity, StockQuantity);
-            if (seller != Seller)
-                throw new ProductDoesNotBelongToSellerException(this, seller);
+
+            EnsureSeller(seller);
             StockQuantity = new Quantity(StockQuantity.Value - additionalQuantity.Value);
         }
 
-        // я думаю можно это убрать, либо добавить статус возврата по причине брака или не подошло
-        public void OrderRefundStock(Seller seller, Quantity additionalQuantity) // увеличиваем наличие товара при удачном возврате
+
+        public void OrderRefundStock(Seller seller, Quantity additionalQuantity)
         {
+            if (additionalQuantity is null)
+                throw new ArgumentNullValueException(nameof(additionalQuantity));
+
             if (additionalQuantity.Value <= 0)
                 throw new QuantityMustBePositiveException(this, additionalQuantity);
-            if (seller != Seller)
-                throw new ProductDoesNotBelongToSellerException(this, seller);
-            StockQuantity = new Quantity(StockQuantity.Value + additionalQuantity.Value);
 
+            EnsureSeller(seller);
+            StockQuantity = new Quantity(StockQuantity.Value + additionalQuantity.Value);
+        }
+
+        // Новое: возврат по sellerId
+        public void OrderRefundStock(Guid sellerId, Quantity additionalQuantity)
+        {
+            if (additionalQuantity is null)
+                throw new ArgumentNullValueException(nameof(additionalQuantity));
+
+            if (additionalQuantity.Value <= 0)
+                throw new QuantityMustBePositiveException(this, additionalQuantity);
+
+            EnsureSellerId(sellerId);
+            StockQuantity = new Quantity(StockQuantity.Value + additionalQuantity.Value);
         }
 
         public void OrderRemoveStock(Seller seller, Quantity additionalQuantity)
         {
+            if (additionalQuantity is null)
+                throw new ArgumentNullValueException(nameof(additionalQuantity));
+
             if (additionalQuantity.Value <= 0)
                 throw new QuantityMustBePositiveException(this, additionalQuantity);
+
             if (additionalQuantity.Value > StockQuantity.Value)
                 throw new QuantityDecreaseExceedsAvailableException(this, additionalQuantity, StockQuantity);
-            if (seller != Seller)
-                throw new ProductDoesNotBelongToSellerException(this, seller);
-            StockQuantity = new Quantity(StockQuantity.Value - additionalQuantity.Value);
 
+            EnsureSeller(seller);
+            StockQuantity = new Quantity(StockQuantity.Value - additionalQuantity.Value);
         }
 
-        // сделать методы
-        /*
-         SellerUpdateStock (2 метода) - может обновлять наличие товара, но только тот который он продаёт
+        // Новое: списание по sellerId
+        public void OrderRemoveStock(Guid sellerId, Quantity additionalQuantity)
+        {
+            if (additionalQuantity is null)
+                throw new ArgumentNullValueException(nameof(additionalQuantity));
 
-        OrderUpdateStock (2 метода)- может уменьшать наличие товара при продаже (только то что купили или было в корзине), при возврате наличие добавляет на то количество которое вернули 
-         
-         */
+            if (additionalQuantity.Value <= 0)
+                throw new QuantityMustBePositiveException(this, additionalQuantity);
+
+            if (additionalQuantity.Value > StockQuantity.Value)
+                throw new QuantityDecreaseExceedsAvailableException(this, additionalQuantity, StockQuantity);
+
+            EnsureSellerId(sellerId);
+            StockQuantity = new Quantity(StockQuantity.Value - additionalQuantity.Value);
+        }
 
         public void ChangePrice(Money newPrice, Seller seller)
         {
-            if (seller != Seller)
-                throw new ProductDoesNotBelongToSellerException(this, seller);
+            EnsureSeller(seller);
 
-            if (newPrice == null)
+            if (newPrice is null)
                 throw new ArgumentNullValueException(nameof(newPrice));
 
             Price = newPrice;
@@ -133,4 +196,3 @@ namespace MarketplaceSale.Domain.Entities
         #endregion
     }
 }
-        

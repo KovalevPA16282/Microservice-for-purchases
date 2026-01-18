@@ -1,19 +1,15 @@
-﻿using MarketPlaceSale.Application.Models.Base;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System;
+using MarketplaceSale.Domain.Enums;
+using MarketplaceSale.Application.Models.Base;
 
-namespace MarketPlaceSale.Application.Models.Product
-{
-    public record class ProductModel(
-         Guid SellerId,
-         Guid Id,
-         string ProductName,
-         string Description,
-         decimal Price,
-         int StockQuantity
+namespace MarketplaceSale.Application.Models.Product;
 
-    ) :IModel<Guid>;
-}
+public sealed record ProductModel(
+    Guid Id,
+    Guid SellerId,
+    string ProductName,
+    string Description,
+    decimal Price,
+    int StockQuantity,
+    ProductListingStatus ListingStatus
+) : IModel<Guid>;

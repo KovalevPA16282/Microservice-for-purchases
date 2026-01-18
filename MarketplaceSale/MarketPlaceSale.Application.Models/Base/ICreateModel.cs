@@ -4,7 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MarketPlaceSale.Application.Models.Base
+namespace MarketplaceSale.Application.Models.Base;
+
+public interface ICreateModel
 {
-    public interface ICreateModel;
 }

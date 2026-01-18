@@ -15,7 +15,7 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
         public void Configure(EntityTypeBuilder<Cart> builder)
         {
             builder.HasKey(c => c.Id);
-            builder.Property(c => c.Id).ValueGeneratedOnAdd();
+            builder.Property(c => c.Id).ValueGeneratedNever();
 
             builder.Property<Guid>("ClientId");
 

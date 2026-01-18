@@ -1,14 +1,5 @@
-﻿using MarketPlaceSale.Application.Models.Base;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using MarketplaceSale.Application.Models.Base;
 
-namespace MarketPlaceSale.Application.Models.Client
-{
-    public record class CreateClientModel(
-        Guid Id,
-        string Username
-    ) : ICreateModel;
-}
+namespace MarketplaceSale.Application.Models.Client;
+
+public sealed record CreateClientModel(string Username) : ICreateModel;

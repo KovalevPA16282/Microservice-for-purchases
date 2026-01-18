@@ -1,14 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using MarketplaceSale.Domain.Entities.Base;
-using MarketplaceSale.Domain.Entities;
 using MarketplaceSale.Domain.Enums;
 using MarketplaceSale.Domain.Exceptions;
 using MarketplaceSale.Domain.ValueObjects;
-
 
 namespace MarketplaceSale.Domain.Entities
 {
@@ -17,148 +13,177 @@ namespace MarketplaceSale.Domain.Entities
         #region Fields
 
         private readonly ICollection<Product> _products = new List<Product>();
-        private readonly ICollection<Order> _salesHistory = new List<Order>();
 
-        #endregion // Fields
+        #endregion
 
         #region Properties
 
-        public Username Username { get; private set; } = username ?? throw new ArgumentNullValueException(nameof(username));
+        public Username Username { get; private set; } =
+            username ?? throw new ArgumentNullValueException(nameof(username));
 
         public Money BusinessBalance { get; private set; } = new(0);
 
         public IReadOnlyCollection<Product> AvailableProducts =>
-            _products.Where(p => p.StockQuantity.Value > 0).ToList().AsReadOnly();
+            _products
+                .Where(p => p.ListingStatus == ProductListingStatus.Listed &&
+                            p.StockQuantity.Value > 0)
+                .ToList()
+                .AsReadOnly();
 
-        public IReadOnlyCollection<Order> SalesHistory => _salesHistory.ToList().AsReadOnly();
-
-        #endregion // Properties
+        #endregion
 
         #region Behavior
 
-        internal bool ChangeUsername(Username newUsername) // Изменить имя пользователя
+        public bool ChangeUsername(Username newUsername)
         {
+            if (newUsername is null)
+                throw new ArgumentNullValueException(nameof(newUsername));
+
             if (Username == newUsername) return false;
             Username = newUsername;
             return true;
         }
 
-        public void AddProduct(Product product) // добавить новый продукт
+        public void AddProduct(Product product)
         {
-            if (product == null)
+            if (product is null)
                 throw new ArgumentNullValueException(nameof(product));
 
-            if (product.Seller != this)
-                product.AssignToSeller(this); // Присвоить товар этому продавцу
+            if (product.Seller is null || product.Seller.Id != this.Id)
+                product.AssignToSeller(this);
 
-            if (_products.Contains(product))
+            if (_products.Any(p => p.Id == product.Id))
                 throw new ProductAlreadyExistsException(this, product);
 
             _products.Add(product);
         }
 
-        public void RemoveProduct(Product product) // убрать продукт
+        public void RemoveProduct(Product product)
         {
-            if (product == null)
+            if (product is null)
                 throw new ArgumentNullValueException(nameof(product));
 
-            if (product.Seller != this)
-                throw new ProductDoesNotBelongToSellerException(product, this);
-
-            product.UnassignSeller(); // Отвязываем от продавца
-            _products.Remove(product);
-            
+            EnsureOwnership(product);
+            product.RemoveFromSale(this);
         }
 
+        public void ReturnProductToSale(Product product)
+        {
+            if (product is null)
+                throw new ArgumentNullValueException(nameof(product));
 
-        public void ReplenishProduct(Product product, Quantity quantity) //Пополнить наличие продукта
+            EnsureOwnership(product);
+            product.ReturnToSale(this);
+        }
+
+        public void DeleteProduct(Product product)
+        {
+            if (product is null)
+                throw new ArgumentNullValueException(nameof(product));
+
+            EnsureOwnership(product);
+
+            if (product.StockQuantity.Value > 0)
+                throw new InvalidOperationException("Cannot delete product while stock is greater than zero.");
+
+            product.RemoveFromSale(this);
+
+            var existing = _products.FirstOrDefault(p => p.Id == product.Id);
+            if (existing != null)
+                _products.Remove(existing);
+        }
+
+        public void ReplenishProduct(Product product, Quantity quantity)
         {
             EnsureOwnership(product);
             product.SellerIncreaseStock(this, quantity);
         }
 
-        public void ReduceProductStock(Product product, Quantity quantity) //Уменьшить наличие продуктов
+        public void ReduceProductStock(Product product, Quantity quantity)
         {
             EnsureOwnership(product);
             product.SellerDecreaseStock(this, quantity);
         }
 
-        public void ChangeProductPrice(Product product, Money newPrice) // Изменить стоимость продукта
+        public void ChangeProductPrice(Product product, Money newPrice)
         {
             EnsureOwnership(product);
             product.ChangePrice(newPrice, this);
         }
 
-
-        public void RejectOrderReturn(Order order) // отклонить возврат
+        public void RejectOrderReturn(Order order)
         {
             if (order is null)
                 throw new ArgumentNullValueException(nameof(order));
-            if (!SalesHistory.Contains(order))
-                throw new OrderDoesNotBelongToSellerException(order, this);
+
+            EnsureOrderHasThisSeller(order);
 
             order.RejectReturn(this);
-            order.Client.RemoveRejectedReturn(order, this); // удаляем из истории возвратов
         }
 
-
-        public void ApproveOrderReturn(Order order) // одобрить возврат
+        public void ApproveOrderReturn(Order order)
         {
             if (order is null)
                 throw new ArgumentNullValueException(nameof(order));
-            if (!SalesHistory.Contains(order))
-                throw new OrderDoesNotBelongToSellerException(order, this);
 
+            EnsureOrderHasThisSeller(order);
+
+            decimal refundAmount = 0m;
+
+            foreach (var line in order.OrderLines.Where(l => l.SellerId == this.Id))
+            {
+                var key = (SellerId: this.Id, ProductId: line.Product.Id);
+
+                if (!order.ReturnedProducts.TryGetValue(key, out var qty))
+                    continue;
+
+                if (qty.Value <= 0)
+                    continue;
+
+                if (qty.Value > line.Quantity.Value)
+                    throw new InvalidRefundQuantityException(line.Product, qty, line.Quantity.Value);
+
+                refundAmount += line.Product.Price.Value * qty.Value;
+            }
+
+            if (refundAmount <= 0m)
+                throw new InvalidOperationException("No return items found for this seller.");
+
+            var money = new Money(refundAmount);
+
+            // 1) Сначала убедиться, что продавец реально может отдать деньги (может бросить NotEnoughFundsException)
+            SubtractBalance(money);
+
+            // 2) Теперь можно начислять клиенту (это уже не должно бросать по текущим правилам Money)
+            order.Client.AddBalance(money);
+
+            // 3) И только после успешных денег — менять состояние возврата и делать stock-refund внутри заказа
             order.ApproveReturn(this);
-
-            //Финализация возврата — возврат на баланс клиента
-            var refundAmount = order.OrderLines
-                .Where(line => line.Product.Seller == this)
-                .Sum(line => line.Product.Price.Value * line.Quantity.Value);
-
-            order.Client.AddBalance(new Money(refundAmount));
-            SubtractBalance(new Money(refundAmount));
             order.MarkAsRefunded(this);
         }
 
-        /*
-        public void ProcessPartialRefund(Order order, Product product, Quantity quantity) // частичный возврат
+
+        private void EnsureOwnership(Product product)
         {
-            if (order is null)
-                throw new ArgumentNullValueException(nameof(order));
             if (product is null)
                 throw new ArgumentNullValueException(nameof(product));
 
-            if (product.Seller != this)
+            if (product.Seller is null ||
+                product.Seller.Id != this.Id ||
+                !_products.Any(p => p.Id == product.Id))
+            {
                 throw new ProductDoesNotBelongToSellerException(product, this);
-            if (!order.OrderLines.Any(l => l.Product == product))
-                throw new ProductNotInOrderException(product);
-            if (!SalesHistory.Contains(order))
+            }
+        }
+
+        private void EnsureOrderHasThisSeller(Order order)
+        {
+            // Источник истины: наличие строк этого продавца в заказе
+            if (!order.OrderLines.Any(l => l.SellerId == this.Id))
                 throw new OrderDoesNotBelongToSellerException(order, this);
-
-            order.PartialRefund(this, product, quantity);
-
-            var refundAmount = product.Price * quantity.Value;
-            SubtractBalance(refundAmount);
         }
 
-        */
-
-
-
-        private void EnsureOwnership(Product product) // проверка владения продукта
-        {
-            if (product.Seller != this || !_products.Contains(product))
-                throw new ProductDoesNotBelongToSellerException(product, this);
-        }
-
-        public void AddSaleHistory(Order order)  // Добавить заказ в историю продажи, вызывается в Order
-        {
-            if (!_salesHistory.Contains(order))
-                _salesHistory.Add(order);
-        }
-
-        public void AddBalance(Money amount) // Пополнение баланса при продаже, вызывается в Order
+        public void AddBalance(Money amount)
         {
             if (amount is null)
                 throw new ArgumentNullValueException(nameof(amount));
@@ -166,7 +191,7 @@ namespace MarketplaceSale.Domain.Entities
             BusinessBalance += amount;
         }
 
-        public void SubtractBalance(Money amount) // Уменьшение баланса при возврате товара, вызывается в Order
+        public void SubtractBalance(Money amount)
         {
             if (amount is null)
                 throw new ArgumentNullValueException(nameof(amount));
@@ -176,7 +201,7 @@ namespace MarketplaceSale.Domain.Entities
 
             BusinessBalance -= amount;
         }
+
         #endregion
     }
 }
-

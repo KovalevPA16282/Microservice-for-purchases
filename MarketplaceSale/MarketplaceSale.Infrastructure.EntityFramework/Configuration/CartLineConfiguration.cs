@@ -10,7 +10,7 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
         public void Configure(EntityTypeBuilder<CartLine> builder)
         {
             builder.HasKey(cl => cl.Id);
-            builder.Property(cl => cl.Id).ValueGeneratedOnAdd();
+            builder.Property(cl => cl.Id).ValueGeneratedNever();
 
             builder.HasOne(cl => cl.Cart)
                 .WithMany(c => c.CartLines)

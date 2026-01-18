@@ -1,40 +1,26 @@
-﻿using MarketPlaceSale.Application.Models.Product;
+﻿using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using MarketplaceSale.Application.Models.Product;
 
-namespace MarketPlaceSale.Application.Services.Abstractions
+namespace MarketplaceSale.Application.Services.Abstractions;
+
+public interface IProductApplicationService
 {
-    public interface IProductApplicationService
-    {
-        Task<ProductModel?> GetProductByIdAsync(Guid id, CancellationToken cancellationToken);
-        Task<IEnumerable<ProductModel>> GetProductAsync(CancellationToken cancellationToken);
-        Task<ProductModel?> CreateProductAsync(CreateProductModel ProductInformation, CancellationToken cancellationToken);
-        Task<bool> UpdateProductAsync(ProductModel Product, CancellationToken cancellationToken);
-        Task<bool> DeleteProductAsync(Guid id, CancellationToken cancellationToken);
-    }
+    Task<ProductModel?> GetProductByIdAsync(Guid productId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ProductModel>> GetProductsAsync(CancellationToken cancellationToken);
+
+    Task<Guid> CreateProductAsync(CreateProductModel productInformation, CancellationToken cancellationToken);
+    Task DeleteProductAsync(Guid sellerId, Guid productId, CancellationToken cancellationToken);
+
+    Task ChangePriceAsync(Guid sellerId, Guid productId, decimal newPrice, CancellationToken cancellationToken);
+    Task IncreaseStockAsync(Guid sellerId, Guid productId, int quantity, CancellationToken cancellationToken);
+    Task DecreaseStockAsync(Guid sellerId, Guid productId, int quantity, CancellationToken cancellationToken);
+    Task UnlistAsync(Guid sellerId, Guid productId, CancellationToken cancellationToken);
+    Task ListAsync(Guid sellerId, Guid productId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ProductModel>> GetProductsBySellerIdAsync(Guid sellerId, CancellationToken cancellationToken); //  получить вообще все товары (0 в наличии, снятые с продажи)
+    //Task<IReadOnlyList<ProductModel>> GetProductsBySellerIdAsync(Guid sellerId, CancellationToken cancellationToken); // получить все доступные к продаже товары
+
 }
 
-
-
-/*
-// Получить все товары
-Task<IEnumerable<ProductModel>> GetAllProductsAsync();
-
-// Получить товар по ID
-Task<ProductModel?> GetProductByIdAsync(Guid productId);
-
-// Создать товар (с привязкой к продавцу)
-Task<Guid> CreateProductAsync(ProductModel model);
-
-// Обновить описание и цену товара (только продавец может)
-Task UpdateProductAsync(Guid productId, string newDescription, decimal newPrice, Guid sellerId);
-
-// Удалить товар (если поддерживается)
-Task DeleteProductAsync(Guid productId, Guid sellerId);
-
-// Изменить количество на складе (увеличение/уменьшение) продавцом
-Task IncreaseStockAsync(Guid productId, int quantity, Guid sellerId);
-Task DecreaseStockAsync(Guid productId, int quantity, Guid sellerId);
-
-// Обновление склада при заказе/возврате
-Task RemoveStockByOrderAsync(Guid productId, int quantity, Guid sellerId);
-Task ReturnStockByOrderAsync(Guid productId, int quantity, Guid sellerId);
-*/

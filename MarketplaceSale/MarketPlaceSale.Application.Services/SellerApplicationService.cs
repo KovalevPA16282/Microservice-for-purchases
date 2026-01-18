@@ -1,58 +1,56 @@
-﻿using AutoMapper;
-using MarketPlaceSale.Application.Models.Seller;
-using MarketPlaceSale.Application.Services.Abstractions;
-using MarketplaceSale.Domain.Entities;
-using MarketplaceSale.Domain.ValueObjects;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
+using AutoMapper;
+using MarketplaceSale.Application.Models.Seller;
+using MarketplaceSale.Application.Services.Abstractions;
+using MarketplaceSale.Domain.Entities;
 using MarketplaceSale.Domain.Repositories.Abstractions;
+using MarketplaceSale.Domain.ValueObjects;
 
-namespace MarketPlaceSale.Application.Services
+namespace MarketplaceSale.Application.Services;
+
+public sealed class SellerApplicationService(
+    ISellerRepository sellerRepository,
+    IMapper mapper
+) : ISellerApplicationService
 {
-    public class SellerApplicationService(ISellerRepository repository, IMapper mapper) : ISellerApplicationService
+    public async Task<Guid> RegisterAsync(CreateSellerModel sellerInformation, CancellationToken cancellationToken)
     {
-        public async Task<IEnumerable<SellerModel>> GetSellersAsync(CancellationToken cancellationToken = default)
-            => (await repository.GetAllAsync(cancellationToken = default, true))
-            .Select(mapper.Map<SellerModel>);
+        var seller = new Seller(Guid.NewGuid(), new Username(sellerInformation.Username));
 
-        public async Task<SellerModel?> GetSellerByIdAsync(Guid id, CancellationToken cancellationToken = default)
-        {
-            var Seller = await repository.GetByIdAsync(id, cancellationToken);
-            return Seller is null ? null : mapper.Map<SellerModel>(Seller);
-        }
+        await sellerRepository.AddAsync(seller, cancellationToken);
+        return seller.Id;
+    }
 
-        public async Task<SellerModel?> GetSellerByUsernameAsync(string username, CancellationToken cancellationToken = default)
-        {
-            var Seller = await repository.GetSellerByUsernameAsync(username, cancellationToken);
-            return Seller is null ? null : mapper.Map<SellerModel>(Seller);
-        }
-        public async Task<SellerModel?> CreateSellerAsync(CreateSellerModel SellerInformation, CancellationToken cancellationToken = default)
-        {
-            if (await repository.GetByIdAsync(SellerInformation.Id, cancellationToken) is not null)
-                return null;
+    public async Task<SellerModel?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // ✅ Для SellerModel нужны продукты, поэтому берём метод с Include продуктов
+        var seller = await sellerRepository.GetByIdWithProductsAsync(id, cancellationToken, asNoTracking: true);
+        return seller is null ? null : mapper.Map<SellerModel>(seller);
+    }
 
-            Seller Seller = new(SellerInformation.Id, new Username(SellerInformation.Username));
-            var createdSeller = await repository.AddAsync(Seller, cancellationToken);
-            return createdSeller is null ? null : mapper.Map<SellerModel>(createdSeller);
-        }
+    public async Task<SellerModel?> GetByUsernameAsync(string username, CancellationToken cancellationToken)
+    {
+        // ✅ Один запрос, сразу с продуктами
+        var seller = await sellerRepository.GetByUsernameWithProductsAsync(username, cancellationToken, asNoTracking: true);
+        return seller is null ? null : mapper.Map<SellerModel>(seller);
+    }
 
-        public async Task<bool> UpdateSellerAsync(SellerModel Seller, CancellationToken cancellationToken = default)
-        {
-            var entity = await repository.GetByIdAsync(Seller.Id, cancellationToken);
-            if (entity is null)
-                return false;
+    public async Task ChangeUsernameAsync(Guid sellerId, string newUsername, CancellationToken cancellationToken)
+    {
+        // ✅ Для изменения нужен tracking
+        var seller = await sellerRepository.GetByIdAsync(sellerId, cancellationToken, asNoTracking: false);
+        if (seller is null) return;
 
-            entity = mapper.Map<Seller>(Seller);
-            return await repository.UpdateAsync(entity, cancellationToken);
-        }
+        seller.ChangeUsername(new Username(newUsername));
+        await sellerRepository.UpdateAsync(seller, cancellationToken);
+    }
 
-        public async Task<bool> DeleteSellerAsync(Guid id, CancellationToken cancellationToken = default)
-        {
-            var Seller = await repository.GetByIdAsync(id, cancellationToken);
-            return Seller is null ? false : await repository.DeleteAsync(Seller, cancellationToken);
-        }
+    public async Task<decimal> GetBusinessBalanceAsync(Guid sellerId, CancellationToken cancellationToken)
+    {
+        // ✅ Баланс не требует Include продуктов
+        var seller = await sellerRepository.GetByIdAsync(sellerId, cancellationToken, asNoTracking: true);
+        return seller?.BusinessBalance.Value ?? 0m;
     }
 }

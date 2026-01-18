@@ -1,24 +1,11 @@
-﻿using MarketplaceSale.Domain.Entities;
-using MarketPlaceSale.Application.Models.Base;
-using MarketPlaceSale.Application.Models.Order;
-using MarketPlaceSale.Application.Models.Product;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using MarketplaceSale.Application.Models.Base;
+using MarketplaceSale.Application.Models.Product;
 
-namespace MarketPlaceSale.Application.Models.Seller
+namespace MarketplaceSale.Application.Models.Seller;
+
+public sealed record SellerModel(Guid Id, string Username, decimal BusinessBalance) : IModel<Guid>
 {
-    public record class SellerModel(
-        Guid Id,
-        string Username,
-        decimal BusinessBalance
-        ) : IModel<Guid>
-    {
-        public IReadOnlyCollection<ProductModel> AvailableProducts { get; init; }         
-
-        public IReadOnlyCollection<ProductModel> SalesHistory { get; init; }
-    }
-
+    public required IReadOnlyList<ProductModel> AvailableProducts { get; init; }
 }

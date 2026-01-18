@@ -1,12 +1,7 @@
 ﻿using MarketplaceSale.Domain.Entities;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using MarketplaceSale.Domain.ValueObjects;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
 {
@@ -15,7 +10,11 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
         public void Configure(EntityTypeBuilder<OrderLine> builder)
         {
             builder.HasKey(ol => ol.Id);
-            builder.Property(ol => ol.Id).ValueGeneratedOnAdd();
+
+            // Важно: выбери один вариант для Id:
+            // - ValueGeneratedNever(), если Id задаётся в домене (Guid.NewGuid())
+            // - ValueGeneratedNever(), если Id генерируется в БД/EF
+            builder.Property(ol => ol.Id).ValueGeneratedNever();
 
             builder.HasOne(ol => ol.Product)
                    .WithMany()
@@ -28,22 +27,15 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
                    .IsRequired()
                    .OnDelete(DeleteBehavior.Restrict);
 
+            // ❌ УДАЛИТЬ этот блок полностью, чтобы не было второй связи:
+            // builder.HasOne(ol => ol.Order)
+            //        .WithMany("_orderLines")
+            //        .HasForeignKey(ol => ol.OrderId)
+            //        .IsRequired();
 
-            builder.HasOne(ol => ol.Order)
-                   .WithMany("_orderLines")
-                   .HasForeignKey(ol => ol.OrderId)
-                   .IsRequired();
-
-
-            // Правильное маппинг value object'а
             builder.Property(ol => ol.Quantity)
-                .HasConversion(
-                    q => q.Value,
-                    v => new Quantity(v))
-                .IsRequired();
-
-
+                   .HasConversion(q => q.Value, v => new Quantity(v))
+                   .IsRequired();
         }
     }
-
 }

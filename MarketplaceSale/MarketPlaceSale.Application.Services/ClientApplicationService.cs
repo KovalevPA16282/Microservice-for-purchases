@@ -1,62 +1,94 @@
-﻿using AutoMapper;
-using MarketplaceSale.Domain.Entities;
-using MarketPlaceSale.Application.Models.Client;
-using MarketPlaceSale.Application.Services.Abstractions;
-using MarketplaceSale.Domain.Enums;
-using MarketplaceSale.Domain.ValueObjects;
-using MarketplaceSale.Domain.Repositories.Abstractions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
+using AutoMapper;
+using MarketplaceSale.Application.Models.Client;
+using MarketplaceSale.Application.Services.Abstractions;
+using MarketplaceSale.Domain.Entities;
+using MarketplaceSale.Domain.Repositories.Abstractions;
+using MarketplaceSale.Domain.ValueObjects;
 
+namespace MarketplaceSale.Application.Services;
 
-namespace MarketPlaceSale.Application.Services
+public sealed class ClientApplicationService(
+    IClientRepository clientRepository,
+    IMapper mapper
+) : IClientApplicationService
 {
-    public class ClientApplicationService(IClientRepository repository, IMapper mapper) : IClientApplicationService
+    public async Task<Guid> RegisterAsync(CreateClientModel clientInformation, CancellationToken cancellationToken)
     {
-        // сделать ещё GetClientByUsernameAsync
-        public async Task<IEnumerable<ClientModel>> GetClientsAsync(CancellationToken cancellationToken = default)
-            => (await repository.GetAllAsync(cancellationToken = default, true))
-            .Select(mapper.Map<ClientModel>);
+        var client = new Client(new Username(clientInformation.Username));
+        await clientRepository.AddAsync(client, cancellationToken);
+        return client.Id;
+    }
 
-        public async Task<ClientModel?> GetClientByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<ClientModel?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByIdWithCartAsync(id, cancellationToken, asNoTracking: true);
+        return client is null ? null : mapper.Map<ClientModel>(client);
+    }
+
+    public async Task<ClientModel?> GetByUsernameAsync(string username, CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByUsernameWithCartAsync(username, cancellationToken, asNoTracking: true);
+        return client is null ? null : mapper.Map<ClientModel>(client);
+    }
+
+    public async Task<ClientModel?> GetByUsernameWithCartAsync(string username, CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByUsernameWithCartAsync(username, cancellationToken, asNoTracking: true);
+        return client is null ? null : mapper.Map<ClientModel>(client);
+    }
+
+    public async Task<ClientCommandResult> ChangeUsernameAsync(
+        Guid clientId,
+        string newUsername,
+        CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByIdAsync(clientId, cancellationToken, asNoTracking: false);
+        if (client is null) return ClientCommandResult.NotFound;
+
+        bool changed;
+        try
         {
-            var Client = await repository.GetByIdAsync(id, cancellationToken);
-            return Client is null ? null : mapper.Map<ClientModel>(Client);
+            changed = client.ChangeUsername(new Username(newUsername));
+        }
+        catch
+        {
+            return ClientCommandResult.Invalid;
         }
 
-        public async Task<ClientModel?> GetClientByUsernameAsync(string username, CancellationToken cancellationToken = default)
-        {
-            var Client = await repository.GetClientByUsernameAsync(username, cancellationToken);
-            return Client is null ? null : mapper.Map<ClientModel>(Client);
-        }
-        public async Task<ClientModel?> CreateClientAsync(CreateClientModel ClientInformation, CancellationToken cancellationToken = default)
-        {
-            if (await repository.GetByIdAsync(ClientInformation.Id, cancellationToken) is not null)
-                return null;
+        if (!changed)
+            return ClientCommandResult.NoChanges;
 
-            Client Client = new(ClientInformation.Id, new Username(ClientInformation.Username));
-            var createdClient = await repository.AddAsync(Client, cancellationToken);
-            return createdClient is null ? null : mapper.Map<ClientModel>(createdClient);
-        }
+        await clientRepository.UpdateAsync(client, cancellationToken);
+        return ClientCommandResult.Ok;
+    }
 
-        public async Task<bool> UpdateClientAsync(ClientModel Client, CancellationToken cancellationToken = default)
+    public async Task<decimal> GetBalanceAsync(Guid clientId, CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByIdAsync(clientId, cancellationToken, asNoTracking: true);
+        return client?.AccountBalance.Value ?? 0m;
+    }
+
+    public async Task<ClientCommandResult> TopUpBalanceAsync(
+        Guid clientId,
+        decimal amount,
+        CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByIdAsync(clientId, cancellationToken, asNoTracking: false);
+        if (client is null) return ClientCommandResult.NotFound;
+
+        try
         {
-            var entity = await repository.GetByIdAsync(Client.Id, cancellationToken);
-            if (entity is null)
-                return false;
-
-            entity = mapper.Map<Client>(Client);
-            return await repository.UpdateAsync(entity, cancellationToken);
+            client.AddBalance(new Money(amount));
         }
-
-        public async Task<bool> DeleteClientAsync(Guid id, CancellationToken cancellationToken = default)
+        catch
         {
-            var Client = await repository.GetByIdAsync(id, cancellationToken);
-            return Client is null ? false : await repository.DeleteAsync(Client, cancellationToken);
+            return ClientCommandResult.Invalid;
         }
+
+        await clientRepository.UpdateAsync(client, cancellationToken);
+        return ClientCommandResult.Ok;
     }
 }
-

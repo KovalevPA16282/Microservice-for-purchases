@@ -15,7 +15,7 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
         public void Configure(EntityTypeBuilder<Seller> builder)
         {
             builder.HasKey(s => s.Id);
-            builder.Property(s => s.Id).ValueGeneratedOnAdd();
+            builder.Property(s => s.Id).ValueGeneratedNever();
 
             builder.Property(s => s.Username)
                 .IsRequired()
@@ -31,7 +31,7 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
                     value => new Money(value)
                 );
 
-            // Навигация к продуктам (Seller -> Products)
+            // Навигация к продуктам (Seller -> _products)
             builder.HasMany<Product>("_products")
                 .WithOne(p => p.Seller)  // предполагается, что в Product есть свойство Seller
                 .HasForeignKey("SellerId")
@@ -43,7 +43,9 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
                 .HasForeignKey("SellerId")
                 .OnDelete(DeleteBehavior.Restrict);*/
 
-            builder.Navigation("_products").UsePropertyAccessMode(PropertyAccessMode.Field);
+            builder.Navigation("_products")
+                .HasField("_products")            // имя поля в классе Seller
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
             //builder.Navigation("_salesHistory").UsePropertyAccessMode(PropertyAccessMode.Field);
 
             // Игнорируем публичные коллекции-обертки, т.к. они не являются сущностями EF

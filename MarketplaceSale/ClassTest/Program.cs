@@ -143,7 +143,7 @@ namespace ClassTest
                     var seller = sellerStatus.Key;
                     var status = sellerStatus.Value;
                     var productsFromSeller = returnOrder1.OrderLines
-                        .Where(line => line.Product.Seller == seller)
+                        .Where(line => line.Product.Seller.Id == seller)
                         .Select(line => line.Product);
 
                     foreach (var product in productsFromSeller)
@@ -246,10 +246,10 @@ namespace ClassTest
                 //Console.WriteLine($"\nБаланс продавца2 после возврата: {seller2.BusinessBalance}");
                 //PrintSeller(seller2);
 
-                //seller1.RemoveProduct(iphone16);
-                //client.AddToCart(iphone16, new Quantity(1));
+                seller1.RemoveProduct(iphone16);
+                client.AddToCart(iphone16, new Quantity(1));
 
-                //PrintCart(client);
+                PrintCart(client);
 
                 // Локальная функция для вывода корзины
                 void PrintCart(Client client)

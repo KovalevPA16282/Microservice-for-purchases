@@ -1,88 +1,43 @@
-﻿using AutoMapper;
-using MarketplaceSale.Domain.Entities;
-using MarketplaceSale.Domain.Repositories.Abstractions;
-using MarketplaceSale.Domain.ValueObjects;
-using MarketPlaceSale.Application.Models.Order;
-using MarketPlaceSale.Application.Models.OrderLine;
-using MarketPlaceSale.Application.Services.Abstractions;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using AutoMapper;
+using MarketplaceSale.Application.Models.OrderLine;
+using MarketplaceSale.Application.Services.Abstractions;
+using MarketplaceSale.Domain.Repositories.Abstractions;
 
-namespace MarketPlaceSale.Application.Services
+namespace MarketplaceSale.Application.Services;
+
+public sealed class OrderLineApplicationService(
+    IOrderLineRepository orderLineRepository,
+    IMapper mapper
+) : IOrderLineApplicationService
 {
-    public class OrderLineApplicationService(IRepository<OrderLine, Guid> repository, IClientRepository clientRepository, IProductRepository productRepository, IMapper mapper) : IOrderLineApplicationService
+    public async Task<OrderLineModel?> GetOrderLineByIdAsync(Guid id, CancellationToken cancellationToken)
     {
-        public async Task<IEnumerable<OrderLineModel>> GetOrderLineAsync(CancellationToken cancellationToken = default)
-        => (await repository.GetAllAsync(cancellationToken, true))
-            .Select(mapper.Map<OrderLineModel>);
+        var entity = await orderLineRepository.GetByIdAsync(id, cancellationToken, asNoTracking: true);
+        return entity is null ? null : mapper.Map<OrderLineModel>(entity);
+    }
 
-        public async Task<OrderLineModel?> CreateOrderLineAsync(Guid cartId, CreateOrderLineModel OrderLineInformation, CancellationToken cancellationToken = default)
-        {
-            var product = await productRepository.GetByIdAsync(OrderLineInformation.ProductId, cancellationToken);
-            if (product is null)
-                return null;
+    public async Task<IReadOnlyList<OrderLineModel>> GetOrderLinesByOrderIdAsync(
+        Guid orderId,
+        CancellationToken cancellationToken)
+    {
+        var entities = await orderLineRepository.GetAllByOrderIdAsync(orderId, cancellationToken, asNoTracking: true);
+        return entities.Select(mapper.Map<OrderLineModel>).ToList();
+    }
 
-            if (await repository.GetByIdAsync(OrderLineInformation.Id, cancellationToken) is not null)
-                return null;
-
-            var quantity = new Quantity(OrderLineInformation.Quantity);
-            var OrderLine = new OrderLine(product, quantity);
-
-            var createdOrderLine = await repository.AddAsync(OrderLine, cancellationToken);
-            return createdOrderLine is null ? null : mapper.Map<OrderLineModel>(createdOrderLine);
-        }
-
-        public async Task<OrderLineModel?> GetOrderLineByIdAsync(Guid id, CancellationToken cancellationToken = default)
-        {
-            var OrderLine = await repository.GetByIdAsync(id, cancellationToken);
-            return OrderLine is null ? null : mapper.Map<OrderLineModel>(OrderLine);
-        }
-
-        /*public async Task<OrderLineModel?> GetOrderLineByUsernameAsync(string username, CancellationToken cancellationToken = default)
-        {
-            var OrderLine = await repository.GetOrderLineByUsernameAsync(username, cancellationToken);
-            return OrderLine is null ? null : mapper.Map<OrderLineModel>(OrderLine);
-        }*/
-        public async Task<OrderLineModel?> CreateOrderLineAsync(CreateOrderLineModel OrderLineInformation, CancellationToken cancellationToken = default)
-        {
-            var client = await clientRepository.GetByIdAsync(OrderLineInformation.Id, cancellationToken);
-            if (client == null)
-            {
-                return null;
-            }
-            if (await repository.GetByIdAsync(OrderLineInformation.Id, cancellationToken) is not null)
-                return null;
-
-            var product = await productRepository.GetByIdAsync(OrderLineInformation.ProductId, cancellationToken);
-            if (product == null)
-            {
-                return null;
-            }
-
-            var quantity = new Quantity(OrderLineInformation.Quantity);
-
-            OrderLine OrderLine = new(product, quantity);
-            var createdOrderLine = await repository.AddAsync(OrderLine, cancellationToken);
-            return createdOrderLine is null ? null : mapper.Map<OrderLineModel>(createdOrderLine);
-        }
-
-        public async Task<bool> UpdateOrderLineAsync(OrderLineModel OrderLine, CancellationToken cancellationToken = default)
-        {
-            var entity = await repository.GetByIdAsync(OrderLine.Id, cancellationToken);
-            if (entity is null)
-                return false;
-
-            entity = mapper.Map<OrderLine>(OrderLine);
-            return await repository.UpdateAsync(entity, cancellationToken);
-        }
-
-        public async Task<bool> DeleteOrderLineAsync(Guid id, CancellationToken cancellationToken = default)
-        {
-            var OrderLine = await repository.GetByIdAsync(id, cancellationToken);
-            return OrderLine is null ? false : await repository.DeleteAsync(OrderLine, cancellationToken);
-        }
+    public async Task<IReadOnlyList<OrderLineModel>> GetOrderLinesByOrderIdAndSellerIdAsync(
+        Guid orderId,
+        Guid sellerId,
+        CancellationToken cancellationToken)
+    {
+        var entities = await orderLineRepository.GetAllByOrderIdAsync(orderId, cancellationToken, asNoTracking: true);
+        return entities
+            .Where(x => x.SellerId == sellerId)
+            .Select(mapper.Map<OrderLineModel>)
+            .ToList();
     }
 }

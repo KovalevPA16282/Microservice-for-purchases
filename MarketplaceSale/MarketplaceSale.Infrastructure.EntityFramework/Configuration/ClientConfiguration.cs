@@ -15,7 +15,7 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
         public void Configure(EntityTypeBuilder<Client> builder)
         {
             builder.HasKey(c => c.Id);
-            builder.Property(c => c.Id).ValueGeneratedOnAdd();
+            builder.Property(c => c.Id).ValueGeneratedNever();
 
             builder.Property(c => c.Username)
                 .IsRequired()
@@ -41,16 +41,16 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
                 .HasForeignKey("ClientId")
                 .OnDelete(DeleteBehavior.Cascade);
 
-            builder.HasMany<Order>("_returnHistory")
-                .WithOne(o => o.ClientReturning)
-                .HasForeignKey("ClientReturningId")
-                .OnDelete(DeleteBehavior.Restrict);
+            //builder.HasMany<Order>("_returnHistory")
+            //    .WithOne(o => o.ClientReturning)
+            //    .HasForeignKey("ClientReturningId")
+            //    .OnDelete(DeleteBehavior.Restrict);
 
             builder.Navigation("_purchaseHistory").UsePropertyAccessMode(PropertyAccessMode.Field);
-            builder.Navigation("_returnHistory").UsePropertyAccessMode(PropertyAccessMode.Field);
+            //builder.Navigation("_returnHistory").UsePropertyAccessMode(PropertyAccessMode.Field);
 
             builder.Ignore(c => c.PurchaseHistory);
-            builder.Ignore(c => c.ReturnHistory);
+            //builder.Ignore(c => c.ReturnHistory);
 
         }
     }

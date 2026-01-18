@@ -25,7 +25,6 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Migrations
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.Cart", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ClientId")
@@ -42,7 +41,6 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Migrations
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.CartLine", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("CartId")
@@ -69,7 +67,6 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Migrations
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.Client", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("AccountBalance")
@@ -88,16 +85,9 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Migrations
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.Order", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ClientHistoryId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ClientReturningId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("DeliveryDate")
@@ -106,24 +96,16 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Migrations
                     b.Property<DateTime>("OrderDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("SellerId")
-                        .HasColumnType("uuid");
-
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
                     b.Property<decimal>("TotalAmount")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClientHistoryId");
-
                     b.HasIndex("ClientId");
-
-                    b.HasIndex("ClientReturningId");
-
-                    b.HasIndex("SellerId");
 
                     b.ToTable("Orders");
                 });
@@ -131,7 +113,6 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Migrations
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.OrderLine", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("OrderId")
@@ -157,16 +138,69 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Migrations
                     b.ToTable("OrderLines");
                 });
 
+            modelBuilder.Entity("MarketplaceSale.Domain.Entities.OrderReturnProduct", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("OrderId", "SellerId", "ProductId")
+                        .IsUnique();
+
+                    b.ToTable("OrderReturnedProducts", (string)null);
+                });
+
+            modelBuilder.Entity("MarketplaceSale.Domain.Entities.OrderReturnStatus", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("OrderId", "SellerId")
+                        .IsUnique();
+
+                    b.ToTable("OrderReturnStatuses", (string)null);
+                });
+
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.Product", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<int>("ListingStatus")
+                        .HasColumnType("integer");
 
                     b.Property<decimal>("Price")
                         .HasColumnType("numeric");
@@ -192,7 +226,6 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Migrations
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.Seller", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("BusinessBalance")
@@ -240,36 +273,19 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Migrations
 
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.Order", b =>
                 {
-                    b.HasOne("MarketplaceSale.Domain.Entities.Client", "ClientHistory")
-                        .WithMany()
-                        .HasForeignKey("ClientHistoryId");
-
                     b.HasOne("MarketplaceSale.Domain.Entities.Client", "Client")
                         .WithMany("_purchaseHistory")
                         .HasForeignKey("ClientId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("MarketplaceSale.Domain.Entities.Client", "ClientReturning")
-                        .WithMany("_returnHistory")
-                        .HasForeignKey("ClientReturningId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("MarketplaceSale.Domain.Entities.Seller", null)
-                        .WithMany("SalesHistory")
-                        .HasForeignKey("SellerId");
-
                     b.Navigation("Client");
-
-                    b.Navigation("ClientHistory");
-
-                    b.Navigation("ClientReturning");
                 });
 
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.OrderLine", b =>
                 {
                     b.HasOne("MarketplaceSale.Domain.Entities.Order", "Order")
-                        .WithMany("_orderLines")
+                        .WithMany("OrderLines")
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -291,6 +307,24 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Migrations
                     b.Navigation("Product");
 
                     b.Navigation("Seller");
+                });
+
+            modelBuilder.Entity("MarketplaceSale.Domain.Entities.OrderReturnProduct", b =>
+                {
+                    b.HasOne("MarketplaceSale.Domain.Entities.Order", null)
+                        .WithMany("_returnedProductsRows")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MarketplaceSale.Domain.Entities.OrderReturnStatus", b =>
+                {
+                    b.HasOne("MarketplaceSale.Domain.Entities.Order", null)
+                        .WithMany("_returnStatusesRows")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.Product", b =>
@@ -315,19 +349,19 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Migrations
                         .IsRequired();
 
                     b.Navigation("_purchaseHistory");
-
-                    b.Navigation("_returnHistory");
                 });
 
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.Order", b =>
                 {
-                    b.Navigation("_orderLines");
+                    b.Navigation("OrderLines");
+
+                    b.Navigation("_returnStatusesRows");
+
+                    b.Navigation("_returnedProductsRows");
                 });
 
             modelBuilder.Entity("MarketplaceSale.Domain.Entities.Seller", b =>
                 {
-                    b.Navigation("SalesHistory");
-
                     b.Navigation("_products");
                 });
 #pragma warning restore 612, 618

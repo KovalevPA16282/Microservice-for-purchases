@@ -1,12 +1,8 @@
-﻿using MarketplaceSale.Domain.Entities;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System;
+using MarketplaceSale.Domain.Entities;
 using MarketplaceSale.Domain.ValueObjects;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
 {
@@ -15,7 +11,7 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
         public void Configure(EntityTypeBuilder<Order> builder)
         {
             builder.HasKey(o => o.Id);
-            builder.Property(o => o.Id).ValueGeneratedOnAdd();
+            builder.Property(o => o.Id).ValueGeneratedNever();
 
             builder.HasOne(o => o.Client)
                    .WithMany("_purchaseHistory")
@@ -23,21 +19,15 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
                    .IsRequired()
                    .OnDelete(DeleteBehavior.Cascade);
 
-            builder.HasOne(o => o.ClientReturning)
-                   .WithMany("_returnHistory")
-                   .HasForeignKey("ClientReturningId")
-                   .OnDelete(DeleteBehavior.Restrict);
-
-            /*builder.HasOne(o => o.Seller)
-                   .WithMany("_salesHistory")
-                   .HasForeignKey("SellerId")
-                   .IsRequired()
-                   .OnDelete(DeleteBehavior.Restrict);*/
+            // ❌ УДАЛИТЬ ЭТИ 5 СТРОК:
+            // builder.HasOne(o => o.ClientReturning)
+            //        .WithMany("_returnHistory")
+            //        .HasForeignKey("ClientReturningId")
+            //        .OnDelete(DeleteBehavior.Restrict);
 
             builder.Property(o => o.TotalAmount)
-                   .HasConversion(
-                       money => money.Value,
-                       value => new Money(value))
+                   .HasConversion(money => money.Value, value => new Money(value))
+                   .HasPrecision(18, 2)
                    .IsRequired();
 
             builder.Property(o => o.Status)
@@ -45,9 +35,7 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
                    .IsRequired();
 
             builder.Property(o => o.OrderDate)
-                   .HasConversion(
-                       od => od.Value,
-                       value => new OrderDate(value))
+                   .HasConversion(od => od.Value, value => new OrderDate(value))
                    .IsRequired();
 
             builder.Property(o => o.DeliveryDate)
@@ -56,22 +44,42 @@ namespace MarketplaceSale.Infrastructure.EntityFramework.Configuration
                        value => value == null ? null : new DeliveryDate(value.Value))
                    .IsRequired(false);
 
-            builder.HasMany<OrderLine>("_orderLines")
-               .WithOne(ol => ol.Order)
-               .HasForeignKey(ol => ol.OrderId)
-               .IsRequired()
-               .OnDelete(DeleteBehavior.Cascade);
+            // ✅ OrderLines: только одна навигация через публичное свойство
+            builder.HasMany(o => o.OrderLines)
+                   .WithOne(ol => ol.Order)
+                   .HasForeignKey(ol => ol.OrderId)
+                   .IsRequired()
+                   .OnDelete(DeleteBehavior.Cascade);
 
-
-
-            builder.Navigation("_orderLines")
+            // ✅ Явно указываем backing field для этой навигации
+            builder.Navigation(o => o.OrderLines)
+                   .HasField("_orderLines")
                    .UsePropertyAccessMode(PropertyAccessMode.Field);
 
-            builder.Ignore(o => o.OrderLines);
+            // Return rows (field-only — нет публичной навигации)
+            builder.HasMany<OrderReturnProduct>("_returnedProductsRows")
+                   .WithOne()
+                   .HasForeignKey(x => x.OrderId)
+                   .IsRequired()
+                   .OnDelete(DeleteBehavior.Cascade);
 
-            // Сложные словари можно игнорировать и сохранять отдельно (если хочешь)
+            builder.Navigation("_returnedProductsRows")
+                   .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+            builder.HasMany<OrderReturnStatus>("_returnStatusesRows")
+                   .WithOne()
+                   .HasForeignKey(x => x.OrderId)
+                   .IsRequired()
+                   .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Navigation("_returnStatusesRows")
+                   .UsePropertyAccessMode(PropertyAccessMode.Field);
+
             builder.Ignore(o => o.ReturnedProducts);
             builder.Ignore(o => o.ReturnStatuses);
+
+            builder.HasIndex("ClientId");
+            // ❌ УДАЛИТЬ: builder.HasIndex("ClientReturningId");
         }
     }
 }

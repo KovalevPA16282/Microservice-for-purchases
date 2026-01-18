@@ -1,19 +1,12 @@
-﻿using MarketPlaceSale.Application.Models.Base;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System;
+using MarketplaceSale.Application.Models.Base;
 
-namespace MarketPlaceSale.Application.Models.Product
-{
-     public record class CreateProductModel(
-         Guid SellerId,
-         Guid Id,
-         string ProductName,
-         string Description,
-         decimal Price,
-         int StockQuantity
-         
-    ): ICreateModel;
-}
+namespace MarketplaceSale.Application.Models.Product;
+
+public sealed record CreateProductModel(
+    Guid SellerId,
+    string ProductName,
+    string Description,
+    decimal Price,
+    int StockQuantity
+) : ICreateModel;

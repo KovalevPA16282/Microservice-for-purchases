@@ -1,6 +1,6 @@
-﻿using MarketplaceSale.Domain.Exceptions;
+﻿using MarketplaceSale.Domain.Entities.Base;
+using MarketplaceSale.Domain.Exceptions;
 using MarketplaceSale.Domain.ValueObjects;
-using MarketplaceSale.Domain.Entities.Base;
 
 namespace MarketplaceSale.Domain.Entities
 {
@@ -11,41 +11,25 @@ namespace MarketplaceSale.Domain.Entities
     {
         #region Properties
 
-        /// <summary>
-        /// Ссылка на заказ, к которому относится данная строка.
-        /// </summary>
-        public Order Order { get; set; }
-        public Guid OrderId { get; set; }
+        public Order Order { get; private set; } = null!;
+        public Guid OrderId { get; private set; }
 
-        /// <summary>
-        /// Продукт, указанный в строке заказа.
-        /// </summary>
-        public Product Product { get; }
-
-        /// <summary>
-        /// Количество товара.
-        /// </summary>
+        public Product Product { get; private set; } = null!;
         public Quantity Quantity { get; private set; }
 
-        /// <summary>
-        /// Продавец, предоставивший указанный товар.
-        /// </summary>
-        public Seller Seller { get; private set; }
+        // Главное изменение: фиксируем продавца по Id (не по ссылке).
+        public Guid SellerId { get; private set; }
+
+        // Навигационное свойство можно оставить (например, для EF),
+        // но в логике сравнивать лучше по SellerId.
+        public Seller Seller { get; private set; } = null!;
 
         #endregion
 
         #region Constructor
-        /// <summary>
-        /// Приватный конструктор для EF.
-        /// </summary>
-        private OrderLine() { }
-        /// <summary>
-        /// Создаёт новый экземпляр строки заказа с указанным продуктом и количеством.
-        /// </summary>
-        /// <param name="product">Продукт, добавляемый в заказ.</param>
-        /// <param name="quantity">Количество единиц товара.</param>
-        /// <exception cref="ArgumentNullValueException">Выбрасывается, если продукт или количество не указаны.</exception>
-        /// <exception cref="QuantityMustBePositiveException">Выбрасывается, если количество товара не положительно.</exception>
+
+        private OrderLine() { } // EF
+
         public OrderLine(Product product, Quantity quantity) : base(Guid.NewGuid())
         {
             if (product is null)
@@ -57,17 +41,37 @@ namespace MarketplaceSale.Domain.Entities
             if (quantity.Value <= 0)
                 throw new QuantityMustBePositiveException(product, quantity);
 
+            if (product.Seller is null)
+                throw new ProductWithoutSellerException(product);
+
             Product = product;
             Quantity = quantity;
-        }
 
+            Seller = product.Seller;
+            SellerId = product.Seller.Id;
+        }
 
         #endregion
 
         #region Behavior
 
+        internal void AttachToOrder(Order order)
+        {
+            if (order is null)
+                throw new ArgumentNullValueException(nameof(order));
+
+            if (OrderId != Guid.Empty && OrderId != order.Id)
+                throw new InvalidOperationException("OrderLine is already attached to another order.");
+
+            Order = order;
+            OrderId = order.Id;
+        }
+
         public void IncreaseQuantity(Quantity amount)
         {
+            if (amount is null)
+                throw new ArgumentNullValueException(nameof(amount));
+
             if (amount.Value <= 0)
                 throw new QuantityMustBePositiveException(Product, amount);
 
@@ -76,6 +80,9 @@ namespace MarketplaceSale.Domain.Entities
 
         public void DecreaseQuantity(Quantity amount)
         {
+            if (amount is null)
+                throw new ArgumentNullValueException(nameof(amount));
+
             if (amount.Value <= 0)
                 throw new QuantityMustBePositiveException(Product, amount);
 

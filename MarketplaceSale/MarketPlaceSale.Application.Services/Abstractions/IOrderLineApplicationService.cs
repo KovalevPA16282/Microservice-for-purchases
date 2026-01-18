@@ -1,27 +1,19 @@
-﻿using MarketplaceSale.Domain.Entities;
-using MarketplaceSale.Domain.Repositories.Abstractions;
-using MarketPlaceSale.Application.Models.OrderLine;
-using MarketPlaceSale.Application.Models.CartLine;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using MarketplaceSale.Application.Models.OrderLine;
 
-namespace MarketPlaceSale.Application.Services.Abstractions
+namespace MarketplaceSale.Application.Services.Abstractions;
+
+public interface IOrderLineApplicationService
 {
-    public interface IOrderLineApplicationService
-    {
-        Task<OrderLineModel?> GetOrderLineByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task<OrderLineModel?> GetOrderLineByIdAsync(Guid id, CancellationToken cancellationToken);
 
-        /*Task<OrderLineModel?> GetOrderLineByUsernameAsync(string username, CancellationToken cancellationToken);*/
+    Task<IReadOnlyList<OrderLineModel>> GetOrderLinesByOrderIdAsync(Guid orderId, CancellationToken cancellationToken);
 
-        Task<IEnumerable<OrderLineModel>> GetOrderLineAsync(CancellationToken cancellationToken);
-
-        Task<OrderLineModel?> CreateOrderLineAsync(CreateOrderLineModel OrderLineInformation, CancellationToken cancellationToken);
-
-        Task<bool> UpdateOrderLineAsync(OrderLineModel OrderLine, CancellationToken cancellationToken);
-
-        Task<bool> DeleteOrderLineAsync(Guid id, CancellationToken cancellationToken);
-    }
+    Task<IReadOnlyList<OrderLineModel>> GetOrderLinesByOrderIdAndSellerIdAsync(
+        Guid orderId,
+        Guid sellerId,
+        CancellationToken cancellationToken);
 }

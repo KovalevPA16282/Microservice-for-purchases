@@ -1,56 +1,211 @@
-﻿using MarketPlaceSale.Application.Models.Cart;
-using MarketPlaceSale.Application.Services.Abstractions;
-using MarketplaceSale.Domain.Entities;
-using MarketplaceSale.Domain.Repositories.Abstractions;
+﻿using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using AutoMapper;
+using MarketplaceSale.Application.Models.Cart;
+using MarketplaceSale.Application.Services.Abstractions;
+using MarketplaceSale.Domain.Repositories.Abstractions;
+using MarketplaceSale.Domain.ValueObjects;
 
-namespace MarketPlaceSale.Application.Services
+namespace MarketplaceSale.Application.Services;
+
+public sealed class CartApplicationService(
+    IClientRepository clientRepository,
+    IProductRepository productRepository,
+    IMapper mapper
+) : ICartApplicationService
 {
-    public class CartApplicationService(ICartRepository repository,
-        IClientRepository clientRepository, 
-        IMapper mapper) : ICartApplicationService
+    public async Task<CartModel?> GetCartByClientIdAsync(Guid clientId, CancellationToken cancellationToken)
     {
-        public async Task<IEnumerable<CartModel>> GetCartAsync(CancellationToken cancellationToken = default)
-            => (await repository.GetAllAsync(cancellationToken = default, true))
-            .Select(mapper.Map<CartModel>);
+        var client = await clientRepository.GetByIdWithCartAndLinesAsync(
+            clientId,
+            cancellationToken,
+            asNoTracking: true);
 
-        public async Task<CartModel?> GetCartByIdAsync(Guid id, CancellationToken cancellationToken = default)
+        return client is null ? null : mapper.Map<CartModel>(client.Cart);
+    }
+
+    public async Task<CartCommandResult> AddToCartAsync(
+        Guid clientId,
+        Guid productId,
+        int quantity,
+        CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByIdWithCartAndLinesAsync(
+            clientId,
+            cancellationToken,
+            asNoTracking: false);
+
+        if (client is null)
+            return CartCommandResult.NotFound;
+
+        var product = await productRepository.GetByIdAsync(productId, cancellationToken, asNoTracking: false);
+        if (product is null)
+            return CartCommandResult.NotFound;
+
+        try
         {
-            var Cart = await repository.GetByIdAsync(id, cancellationToken);
-            return Cart is null ? null : mapper.Map<CartModel>(Cart);
+            client.AddToCart(product, new Quantity(quantity));
+            await clientRepository.UpdateAsync(client, cancellationToken);
+            return CartCommandResult.Ok;
         }
-
-        // сделать ещё ничего пока что 
-
-        public async Task<CartModel?> CreateCartAsync(CreateCartModel CartInformation, CancellationToken cancellationToken = default)
+        catch
         {
-            var client = await clientRepository.GetByIdAsync(CartInformation.ClientId, cancellationToken);
-            if (client == null)
+            return CartCommandResult.Invalid;
+        }
+    }
+
+    public async Task<CartCommandResult> RemoveFromCartAsync(
+        Guid clientId,
+        Guid productId,
+        CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByIdWithCartAndLinesAsync(
+            clientId,
+            cancellationToken,
+            asNoTracking: false);
+
+        if (client is null)
+            return CartCommandResult.NotFound;
+
+        var product = await productRepository.GetByIdAsync(productId, cancellationToken, asNoTracking: false);
+        if (product is null)
+            return CartCommandResult.NotFound;
+
+        try
+        {
+            client.RemoveFromCart(product);
+            await clientRepository.UpdateAsync(client, cancellationToken);
+            return CartCommandResult.Ok;
+        }
+        catch
+        {
+            // например: продукт не в корзине / доменная валидация
+            return CartCommandResult.Invalid;
+        }
+    }
+
+    public async Task<CartCommandResult> ClearCartAsync(Guid clientId, CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByIdWithCartAndLinesAsync(
+            clientId,
+            cancellationToken,
+            asNoTracking: false);
+
+        if (client is null)
+            return CartCommandResult.NotFound;
+
+        client.ClearCart();
+        await clientRepository.UpdateAsync(client, cancellationToken);
+        return CartCommandResult.Ok;
+    }
+
+    public async Task<CartCommandResult> SelectProductAsync(
+        Guid clientId,
+        Guid productId,
+        CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByIdWithCartAndLinesAsync(
+            clientId,
+            cancellationToken,
+            asNoTracking: false);
+
+        if (client is null)
+            return CartCommandResult.NotFound;
+
+        var product = await productRepository.GetByIdAsync(productId, cancellationToken, asNoTracking: false);
+        if (product is null)
+            return CartCommandResult.NotFound;
+
+        try
+        {
+            client.SelectProductForOrder(product);
+            await clientRepository.UpdateAsync(client, cancellationToken);
+            return CartCommandResult.Ok;
+        }
+        catch
+        {
+            // например: продукта нет в корзине
+            return CartCommandResult.Invalid;
+        }
+    }
+
+    public async Task<CartCommandResult> UnselectProductAsync(
+        Guid clientId,
+        Guid productId,
+        CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByIdWithCartAndLinesAsync(
+            clientId,
+            cancellationToken,
+            asNoTracking: false);
+
+        if (client is null)
+            return CartCommandResult.NotFound;
+
+        var product = await productRepository.GetByIdAsync(productId, cancellationToken, asNoTracking: false);
+        if (product is null)
+            return CartCommandResult.NotFound;
+
+        try
+        {
+            client.UnselectProductForOrder(product);
+            await clientRepository.UpdateAsync(client, cancellationToken);
+            return CartCommandResult.Ok;
+        }
+        catch
+        {
+            return CartCommandResult.Invalid;
+        }
+    }
+
+    public async Task<CartCommandResult> ChangeQuantityAsync(
+        Guid clientId,
+        Guid productId,
+        int newQuantity,
+        CancellationToken cancellationToken)
+    {
+        var client = await clientRepository.GetByIdWithCartAndLinesAsync(
+            clientId,
+            cancellationToken,
+            asNoTracking: false);
+
+        if (client is null)
+            return CartCommandResult.NotFound;
+
+        var line = client.Cart.CartLines.FirstOrDefault(x => x.ProductId == productId);
+        if (line is null)
+            return CartCommandResult.NotFound;
+
+        try
+        {
+            if (newQuantity <= 0)
             {
-                return null;
+                // симметрично RemoveFromCartAsync: достаём продукт отдельно
+                var product = await productRepository.GetByIdAsync(productId, cancellationToken, asNoTracking: false);
+                if (product is null)
+                    return CartCommandResult.NotFound;
+
+                client.RemoveFromCart(product);
+                await clientRepository.UpdateAsync(client, cancellationToken);
+                return CartCommandResult.Ok;
             }
-            if (await repository.GetByIdAsync(CartInformation.Id, cancellationToken) is not null)
-                return null;
 
-            Cart Cart = new(client);
-            var createdCart = await repository.AddAsync(Cart, cancellationToken);
-            return createdCart is null ? null : mapper.Map<CartModel>(createdCart);
+            var current = line.Quantity.Value;
+            var delta = newQuantity - current;
+
+            if (delta > 0)
+                line.IncreaseQuantity(new Quantity(delta));
+            else if (delta < 0)
+                line.DecreaseQuantity(new Quantity(-delta));
+
+            await clientRepository.UpdateAsync(client, cancellationToken);
+            return CartCommandResult.Ok;
         }
-
-        public async Task<bool> UpdateCartAsync(CartModel Cart, CancellationToken cancellationToken = default)
+        catch
         {
-            var entity = await repository.GetByIdAsync(Cart.Id, cancellationToken);
-            if (entity is null)
-                return false;
-
-            entity = mapper.Map<Cart>(Cart);
-            return await repository.UpdateAsync(entity, cancellationToken);
-        }
-
-        public async Task<bool> DeleteCartAsync(Guid id, CancellationToken cancellationToken = default)
-        {
-            var Cart = await repository.GetByIdAsync(id, cancellationToken);
-            return Cart is null ? false : await repository.DeleteAsync(Cart, cancellationToken);
+            return CartCommandResult.Invalid;
         }
     }
 }

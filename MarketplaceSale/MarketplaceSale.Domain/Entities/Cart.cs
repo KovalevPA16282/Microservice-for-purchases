@@ -1,36 +1,27 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using MarketplaceSale.Domain.ValueObjects;
 using MarketplaceSale.Domain.Entities.Base;
-using MarketplaceSale.Domain.Exceptions;
 using MarketplaceSale.Domain.Enums;
-
-
+using MarketplaceSale.Domain.Exceptions;
+using MarketplaceSale.Domain.ValueObjects;
 
 namespace MarketplaceSale.Domain.Entities
 {
-
     public class Cart : Entity<Guid>
     {
         #region Fields
 
-        private readonly ICollection<CartLine> _cartLines = new List<CartLine>();
+        private readonly List<CartLine> _cartLines = new();
 
         #endregion
 
         #region Properties
 
-        public Client Client { get; private set; }
+        public Client Client { get; private set; } = null!;
 
-        //public Guid ClientId { get; private set; }
-
-        public IReadOnlyCollection<CartLine> CartLines => (IReadOnlyCollection<CartLine>)_cartLines;
-
-
-
+        // Без лишних аллокаций: read-only view поверх списка (без ToList()).
+        public IReadOnlyList<CartLine> CartLines => _cartLines.AsReadOnly();
 
         #endregion
 
@@ -48,97 +39,100 @@ namespace MarketplaceSale.Domain.Entities
 
         #region Behavior
 
-        // потом добавить методы для изменения количества продуктов в картлайне ChangeQuantity(Product product, Quantity quantity) или DecreaseProductQuantity
         public void AddProduct(Product product, Quantity quantity)
         {
             if (product is null)
                 throw new ArgumentNullValueException(nameof(product));
+
             if (quantity is null || quantity.Value <= 0)
                 throw new QuantityMustBePositiveException(product, quantity);
 
-            var line = _cartLines.FirstOrDefault(l => l.Product == product);
+            var productId = product.Id;
+            var line = _cartLines.FirstOrDefault(l => l.ProductId == productId);
+
+            // Новый блок: проверка, что итоговое количество в корзине не больше stock
+            var currentQty = line?.Quantity.Value ?? 0;
+            var newTotal = currentQty + quantity.Value;
+
+            if (newTotal > product.StockQuantity.Value)
+                throw new NotEnoughStockException(product, new Quantity(newTotal));
+            // -----------------------------
 
             if (line != null)
-            {
                 line.IncreaseQuantity(quantity);
-            }
             else
-            {
-                _cartLines.Add(new CartLine(product, quantity));
-            }
+                _cartLines.Add(new CartLine(this, product, quantity));
         }
+
 
         public void RemoveProduct(Product product)
         {
-            var line = _cartLines.FirstOrDefault(l => l.Product == product);
+            if (product is null)
+                throw new ArgumentNullValueException(nameof(product));
 
-            if (line == null)
+            var productId = product.Id;
+
+            var line = _cartLines.FirstOrDefault(l => l.ProductId == productId);
+            if (line is null)
                 throw new ProductNotInCartException(product);
 
             _cartLines.Remove(line);
         }
 
-        
-        public void SelectAllForBuy() // Выбрать все продукты для заказа
+        public void SelectAllForBuy()
         {
             foreach (var line in _cartLines)
                 line.SelectProduct();
         }
 
-        public void UnselectAllForBuy() // Убрать все продукты для заказа
+        public void UnselectAllForBuy()
         {
             foreach (var line in _cartLines)
                 line.UnselectProduct();
         }
 
-        public void SelectForBuy(Product product) // Выбрать определённый продукт для заказа
+        public void SelectForBuy(Product product)
         {
             if (product is null)
-                throw new ArgumentNullException(nameof(product));
+                throw new ArgumentNullValueException(nameof(product));
 
-            var line = _cartLines.FirstOrDefault(l => l.Product == product);
+            var productId = product.Id;
+
+            var line = _cartLines.FirstOrDefault(l => l.ProductId == productId);
             if (line is null)
-                throw new InvalidOperationException("Product not found in cart.");
+                throw new ProductNotInCartException(product);
 
             line.SelectProduct();
         }
 
-        public void UnselectForBuy(Product product) // Убрать определённый продукт из заказа
+        public void UnselectForBuy(Product product)
         {
             if (product is null)
-                throw new ArgumentNullException(nameof(product));
+                throw new ArgumentNullValueException(nameof(product));
 
-            var line = _cartLines.FirstOrDefault(l => l.Product == product);
+            var productId = product.Id;
+
+            var line = _cartLines.FirstOrDefault(l => l.ProductId == productId);
             if (line is null)
-                throw new InvalidOperationException("Product not found in cart.");
+                throw new ProductNotInCartException(product);
 
             line.UnselectProduct();
         }
 
         public void ClearSelected()
         {
-            var selectedLines = _cartLines.Where(line => line.SelectionStatus == CartSelectionStatus.Selected).ToList();
-
-            foreach (var line in selectedLines)
-                _cartLines.Remove(line);
+            // Удаляем без промежуточного списка
+            _cartLines.RemoveAll(line => line.SelectionStatus == CartSelectionStatus.Selected);
         }
 
-
-        public void ClearCart()
-        {
-            _cartLines.Clear();
-        }
+        public void ClearCart() => _cartLines.Clear();
 
         public Money GetTotalPrice()
         {
-            if (!_cartLines.Any())
-                return new Money(0);
+            decimal total = 0m;
 
-            decimal total = 0;
             foreach (var line in _cartLines)
-            {
-                total += line.Product.Price.Value * line.Quantity.Value;
-            }
+                total += line.GetPrice().Value;
 
             return new Money(total);
         }
@@ -146,5 +140,3 @@ namespace MarketplaceSale.Domain.Entities
         #endregion
     }
 }
-
-

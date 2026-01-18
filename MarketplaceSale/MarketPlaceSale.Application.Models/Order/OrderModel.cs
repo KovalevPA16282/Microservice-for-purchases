@@ -1,50 +1,28 @@
-﻿using MarketplaceSale.Domain.Entities;
-using MarketplaceSale.Domain.Enums;
-using MarketplaceSale.Domain.ValueObjects;
-using MarketPlaceSale.Application.Models.Base;
-using MarketPlaceSale.Application.Models.OrderLine;
-using MarketPlaceSale.Application.Models.Product;
-using MarketPlaceSale.Application.Models.Seller;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using MarketplaceSale.Domain.Enums;
+using MarketplaceSale.Application.Models.Base;
+using MarketplaceSale.Application.Models.OrderLine;
 
-namespace MarketPlaceSale.Application.Models.Order
+namespace MarketplaceSale.Application.Models.Order;
+
+public sealed record OrderModel(Guid Id, Guid ClientId) : IModel<Guid>
 {
-    public record class OrderModel(
-    Guid Id,
-    Guid ClientId
+    public sealed record ReturnedProductModel(
+        Guid SellerId,
+        Guid ProductId,
+        int Quantity
+    );
 
-    ) : IModel<Guid>
-    {
-        public required IEnumerable<OrderLineModel> OrderLines { get; init; }
+    public required IReadOnlyList<OrderLineModel> OrderLines { get; init; }
 
-        public required IEnumerable<ProductModel> ReturnedProducts { get; init; }
-        public required IEnumerable<SellerModel> ReturnStatuses { get; init; }
+    public required IReadOnlyList<ReturnedProductModel> ReturnedProducts { get; init; }
 
-    }
+    public required IReadOnlyDictionary<Guid, ReturnStatus> ReturnStatuses { get; init; }
 
-    /*
-    public record class OrderModel
-    {
-        public Guid Id { get; set; }
+    public required decimal TotalAmount { get; init; }
+    public required OrderStatus Status { get; init; }
 
-        public Guid ClientId { get; set; }
-
-        public List<OrderLineModel> OrderLines { get; set; } = [];
-
-        public decimal TotalAmount { get; set; }
-
-        public string Status { get; set; }
-
-        public DateTime OrderDate { get; set; }
-
-        public DateTime? DeliveryDate { get; set; }
-
-        public Dictionary<Guid, int> ReturnedProducts { get; set; } = [];
-
-        public Dictionary<Guid, string> ReturnStatuses { get; set; } = [];
-    }*/
+    public required DateTime OrderDate { get; init; }
+    public DateTime? DeliveryDate { get; init; }
 }

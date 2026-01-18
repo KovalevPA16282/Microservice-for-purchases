@@ -1,14 +1,25 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using MarketplaceSale.Domain.Entities;
 
-namespace MarketplaceSale.Domain.Repositories.Abstractions
+namespace MarketplaceSale.Domain.Repositories.Abstractions;
+
+public interface ICartRepository : IRepository<Cart, Guid>
 {
-    public interface ICartRepository : IRepository<Cart, Guid>
-    {
-        //Task<Cart?> GetByCartIdAsync(Guid clientId, CancellationToken cancellationToken);
-    }
+    /// <summary>
+    /// Базовая загрузка корзины по клиенту.
+    /// </summary>
+    Task<Cart?> GetByClientIdAsync(
+        Guid clientId,
+        CancellationToken cancellationToken,
+        bool asNoTracking = false);
+
+    /// <summary>
+    /// Для команд: корзина + строки корзины (CartLines).
+    /// </summary>
+    Task<Cart?> GetByClientIdWithLinesAsync(
+        Guid clientId,
+        CancellationToken cancellationToken,
+        bool asNoTracking = false);
 }

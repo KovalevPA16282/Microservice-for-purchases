@@ -9,5 +9,5 @@ using MarketplaceSale.Domain.ValueObjects.Validators;
 namespace MarketplaceSale.Domain.ValueObjects
 {
     public class DeliveryDate(DateTime deliveryDate)
-         : ValueObject<DateTime>(new OrderDateValidator(), deliveryDate);
+         : ValueObject<DateTime>(new DeliveryDateValidator(), deliveryDate);
 }
